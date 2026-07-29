@@ -19,45 +19,65 @@ def _compute_h0_torch(image: torch.Tensor) -> torch.Tensor:
     
     edge_vals = torch.maximum(births[u], births[v_])
     
-    max_uv = torch.maximum(u, v_)
-    min_uv = torch.minimum(u, v_)
+    b_u = births[u]
+    b_v = births[v_]
     
-    order = torch.argsort(max_uv, stable=True)
-    min_uv = min_uv[order]
-    edge_vals = edge_vals[order]
-    u = u[order]
-    v_ = v_[order]
+    diff = b_u - b_v
     
-    order2 = torch.argsort(min_uv, stable=True)
-    edge_vals = edge_vals[order2]
-    u = u[order2]
-    v_ = v_[order2]
+    younger = torch.where(diff > 0, u, torch.where(diff < 0, v_, torch.maximum(u, v_)))
+    older = torch.where(diff > 0, v_, torch.where(diff < 0, u, torch.minimum(u, v_)))
     
-    order3 = torch.argsort(edge_vals, stable=True)
-    u = u[order3]
-    v_ = v_[order3]
-    edge_vals = edge_vals[order3]
+    # Prune zero persistence pairs
+    best_older = torch.full((v,), fill_value=v, dtype=torch.int64, device=image.device)
+    best_older.scatter_reduce_(0, younger, older, reduce="amin", include_self=False)
     
-    # Fast path for python lists
-    u_list: List[int] = u.tolist()
-    v_list: List[int] = v_.tolist()
-    edge_vals_list: List[float] = edge_vals.tolist()
-    births_list: List[float] = births.tolist()
+    is_zp = (older == best_older[younger])
     
-    parent = list(range(v))
-    deaths = [float('inf')] * v
+    # Drop them
+    mask = ~is_zp
     
-    for i in range(len(u_list)):
-        ui = u_list[i]
-        vi = v_list[i]
-        val = edge_vals_list[i]
-        
-        root_u = ui
+    younger_rem = younger[mask]
+    older_rem = older[mask]
+    edge_vals_rem = edge_vals[mask]
+    
+    # Sort remaining edges
+    order = torch.argsort(older_rem, stable=True)
+    younger_rem = younger_rem[order]
+    edge_vals_rem = edge_vals_rem[order]
+    older_rem = older_rem[order]
+    
+    order2 = torch.argsort(younger_rem, stable=True)
+    edge_vals_rem = edge_vals_rem[order2]
+    younger_rem = younger_rem[order2]
+    older_rem = older_rem[order2]
+    
+    order3 = torch.argsort(edge_vals_rem, stable=True)
+    younger_rem = younger_rem[order3]
+    older_rem = older_rem[order3]
+    edge_vals_rem = edge_vals_rem[order3]
+    
+    younger_list = younger_rem.tolist()
+    older_list = older_rem.tolist()
+    edge_vals_list = edge_vals_rem.tolist()
+    births_list = births.tolist()
+    
+    # initialize parent
+    parent = best_older.clone()
+    no_best = (parent == v)
+    parent[no_best] = torch.arange(v, device=image.device)[no_best]
+    parent = parent.tolist()
+    
+    deaths = torch.full((v,), float('inf'), device=image.device, dtype=image.dtype)
+    deaths[~no_best] = births[~no_best]
+    deaths = deaths.tolist()
+    
+    for i in range(len(younger_list)):
+        root_u = younger_list[i]
         while parent[root_u] != root_u:
             parent[root_u] = parent[parent[root_u]]
             root_u = parent[root_u]
             
-        root_v = vi
+        root_v = older_list[i]
         while parent[root_v] != root_v:
             parent[root_v] = parent[parent[root_v]]
             root_v = parent[root_v]
@@ -68,17 +88,17 @@ def _compute_h0_torch(image: torch.Tensor) -> torch.Tensor:
             diff = b_u - b_v
             
             if diff < 0:
-                older = root_u
-                younger = root_v
+                old_r = root_u
+                yng_r = root_v
             elif diff > 0:
-                older = root_v
-                younger = root_u
+                old_r = root_v
+                yng_r = root_u
             else:
-                older = max(root_u, root_v)
-                younger = min(root_u, root_v)
+                old_r = max(root_u, root_v)
+                yng_r = min(root_u, root_v)
                 
-            parent[younger] = older
-            deaths[younger] = val
+            parent[yng_r] = old_r
+            deaths[yng_r] = edge_vals_list[i]
             
     deaths_tensor = torch.tensor(deaths, dtype=image.dtype, device=image.device)
     pairs = torch.stack([births, deaths_tensor, torch.zeros(v, device=image.device, dtype=image.dtype)], dim=1)

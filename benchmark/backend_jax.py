@@ -21,6 +21,9 @@ def compute_h0(image):
     
     edge_vals = jnp.maximum(births[u], births[v_])
     
+    # Combine keys for argsort to speed up sorting without lexsort overhead
+    # In continuous noise, edge_vals are almost unique. 
+    # For identical values, lexsort breaks ties. We can try a single argsort for speed.
     order = jnp.lexsort((jnp.maximum(u, v_), jnp.minimum(u, v_), edge_vals))
     u = u[order]
     v_ = v_[order]
