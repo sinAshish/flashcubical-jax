@@ -1,29 +1,107 @@
 import pytest
 import numpy as np
 from benchmark.benchmark_utils import generate_2d_grid, verify_persistence
+from benchmark.backend_baseline import FlashCubicalBackend
+from benchmark.backend_jax import JaxBackend
+from benchmark.backend_pytorch import PyTorchBackend
 
-def test_generate_2d_grid():
-    grid = generate_2d_grid(128, "uniform")
-    assert grid.shape == (128, 128)
+# --- Utils Tests ---
+
+@pytest.mark.parametrize("size", [16, 32, 64])
+@pytest.mark.parametrize("noise_type", ["uniform", "gaussian"])
+def test_generate_2d_grid(size, noise_type):
+    grid = generate_2d_grid(size, noise_type)
+    assert grid.shape == (size, size)
     assert grid.dtype == np.float64
+    
+    if noise_type == "uniform":
+        assert np.all((grid >= 0.0) & (grid <= 1.0))
+
+def test_generate_2d_grid_invalid():
+    with pytest.raises(ValueError):
+        generate_2d_grid(32, "unknown_noise")
 
 def test_verify_persistence():
-    baseline = np.array([[0.1, 0.5, 0], [0.2, 0.3, 1], [0.4, 0.4, 0]]) # third is zero-persistence
-    test_res = np.array([[0.2, 0.3, 1], [0.1, 0.5, 0], [0.6, 0.6, 0]])
+    # Only H0 matches are tested, H1/H2 will be ignored. 
+    # Zero-persistence pairs should be filtered out.
+    baseline = np.array([
+        [0.1, 0.5, 0], 
+        [0.2, 0.3, 0], 
+        [0.4, 0.4, 0], # zero persistence
+        [0.1, 0.8, 1]  # H1 ignored
+    ])
+    
+    test_res = np.array([
+        [0.2, 0.3, 0], 
+        [0.1, 0.5, 0], 
+        [0.6, 0.6, 0]  # zero persistence
+    ])
+    
     assert verify_persistence(baseline, test_res) is True
 
+def test_verify_persistence_fail():
+    baseline = np.array([[0.1, 0.5, 0]])
+    test_res = np.array([[0.1, 0.6, 0]]) # death mismatch
+    assert verify_persistence(baseline, test_res) is False
+
+
+# --- Backend Protocol Tests ---
+
 def test_baseline_backend():
-    from benchmark.backend_baseline import FlashCubicalBackend
-    grid = generate_2d_grid(64, "uniform")
+    grid = generate_2d_grid(32, "uniform")
     backend = FlashCubicalBackend()
     res = backend.compute_ph(grid)
     assert res.shape[1] == 3
     assert res.dtype == np.float64
+    assert "FlashCubical" in backend.name()
 
-def test_pytorch_backend_basic():
-    from benchmark.backend_pytorch import PyTorchBackend
-    from benchmark.backend_baseline import FlashCubicalBackend
-    grid = generate_2d_grid(32, "uniform")
-    baseline = FlashCubicalBackend().compute_ph(grid)
-    res = PyTorchBackend().compute_ph(grid)
-    assert verify_persistence(baseline, res) is True
+# --- Accuracy Tests ---
+
+@pytest.fixture
+def backends():
+    return [JaxBackend(), PyTorchBackend()]
+
+@pytest.fixture
+def baseline_backend():
+    return FlashCubicalBackend()
+
+@pytest.mark.parametrize("size", [16, 32])
+@pytest.mark.parametrize("noise_type", ["uniform", "gaussian"])
+def test_backends_accuracy_random(backends, baseline_backend, size, noise_type):
+    """Test accuracy against baseline on standard random distributions."""
+    grid = generate_2d_grid(size, noise_type)
+    baseline_res = baseline_backend.compute_ph(grid)
+    
+    for backend in backends:
+        res = backend.compute_ph(grid)
+        assert verify_persistence(baseline_res, res), f"{backend.name()} failed on {noise_type} {size}x{size}"
+
+def test_backends_accuracy_flat_image(backends, baseline_backend):
+    """Test edge case: flat image (all values zero). 
+    Everything is born at 0 and merges immediately, leaving a single essential class at (0, inf)."""
+    grid = np.zeros((32, 32), dtype=np.float64)
+    baseline_res = baseline_backend.compute_ph(grid)
+    
+    for backend in backends:
+        res = backend.compute_ph(grid)
+        assert verify_persistence(baseline_res, res), f"{backend.name()} failed on flat image"
+
+def test_backends_accuracy_checkerboard(backends, baseline_backend):
+    """Test edge case: highly degenerate checkerboard pattern."""
+    grid = np.indices((32, 32)).sum(axis=0) % 2
+    grid = grid.astype(np.float64)
+    baseline_res = baseline_backend.compute_ph(grid)
+    
+    for backend in backends:
+        res = backend.compute_ph(grid)
+        assert verify_persistence(baseline_res, res), f"{backend.name()} failed on checkerboard image"
+
+def test_backends_accuracy_single_peak(backends, baseline_backend):
+    """Test edge case: Single peak in the center (mountain)."""
+    grid = np.zeros((32, 32), dtype=np.float64)
+    grid[16, 16] = 1.0
+    baseline_res = baseline_backend.compute_ph(grid)
+    
+    for backend in backends:
+        res = backend.compute_ph(grid)
+        assert verify_persistence(baseline_res, res), f"{backend.name()} failed on single peak"
