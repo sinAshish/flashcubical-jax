@@ -3,10 +3,10 @@ import numpy as np
 from benchmark.benchmark_utils import generate_2d_grid, verify_persistence
 from benchmark.backend_baseline import FlashCubicalBackend
 from benchmark.backend_jax import JaxBackend
-from benchmark.backend_triton import TritonBackend
+from benchmark.backend_pytorch import PyTorchBackend
 
 def run_suite():
-    backends = [FlashCubicalBackend(), JaxBackend(), TritonBackend()]
+    backends = [FlashCubicalBackend(), JaxBackend(), PyTorchBackend()]
     grid = generate_2d_grid(128, "uniform")
     
     print("Running benchmarks on 128x128 2D Grid (Uniform Noise)...")

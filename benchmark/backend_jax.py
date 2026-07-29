@@ -1,16 +1,74 @@
+import jax
+jax.config.update("jax_enable_x64", True)
+import jax.numpy as jnp
 import numpy as np
 from typing import Any
 from benchmark.backend_protocol import PHBackend
 
+def compute_h0(image):
+    n, m = image.shape
+    v = n * m
+    births = image.flatten()
+    
+    r, c = jnp.meshgrid(jnp.arange(n), jnp.arange(m), indexing='ij')
+    u_h = (r[:, :-1] * m + c[:, :-1]).flatten()
+    v_h = (r[:, :-1] * m + c[:, 1:]).flatten()
+    u_v = (r[:-1, :] * m + c[:-1, :]).flatten()
+    v_v = (r[1:, :] * m + c[1:, :]).flatten()
+    
+    u = jnp.concatenate([u_h, u_v])
+    v_ = jnp.concatenate([v_h, v_v])
+    
+    edge_vals = jnp.maximum(births[u], births[v_])
+    
+    order = jnp.lexsort((jnp.maximum(u, v_), jnp.minimum(u, v_), edge_vals))
+    u = u[order]
+    v_ = v_[order]
+    edge_vals = edge_vals[order]
+    
+    parent = jnp.arange(v)
+    deaths = jnp.full(v, jnp.inf)
+    
+    def find(p, i):
+        def cond(state):
+            curr, p_arr = state
+            return p_arr[curr] != curr
+        def body(state):
+            curr, p_arr = state
+            return p_arr[curr], p_arr
+        root, _ = jax.lax.while_loop(cond, body, (i, p))
+        return root
+
+    def step(i, state):
+        p, d = state
+        ui, vi, val = u[i], v_[i], edge_vals[i]
+        
+        root_u = find(p, ui)
+        root_v = find(p, vi)
+        
+        def do_union(p, d):
+            b_u, b_v = births[root_u], births[root_v]
+            diff = b_u - b_v
+            
+            older = jnp.where(diff < 0, root_u, jnp.where(diff > 0, root_v, jnp.maximum(root_u, root_v)))
+            younger = jnp.where(diff < 0, root_v, jnp.where(diff > 0, root_u, jnp.minimum(root_u, root_v)))
+            
+            p = p.at[younger].set(older)
+            d = d.at[younger].set(val)
+            return p, d
+            
+        return jax.lax.cond(root_u != root_v, do_union, lambda p, d: (p, d), p, d)
+        
+    final_p, final_d = jax.lax.fori_loop(0, len(u), step, (parent, deaths))
+    pairs = jnp.stack([births, final_d, jnp.zeros(v)], axis=1)
+    return pairs
+
+_compute_jit = jax.jit(compute_h0)
+
 class JaxBackend(PHBackend):
     def compute_ph(self, image: Any) -> np.ndarray:
-        # Basic scaffold. For the initial benchmark, we will fallback to CPU 
-        # until the full JAX UF algorithm is implemented in detail.
-        # Here we just implement the mock that delegates to FlashCubical to verify wiring.
-        # Real implementation will replace this.
-        import flash_cubical as fc
-        arr = np.ascontiguousarray(np.asarray(image, dtype=np.float64))
-        return fc.compute(arr).values
+        arr = jnp.asarray(image, dtype=jnp.float64)
+        return np.array(_compute_jit(arr))
 
     def name(self) -> str:
-        return "JAX (Mocked for now)"
+        return "JAX"

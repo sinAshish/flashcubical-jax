@@ -20,10 +20,10 @@ def test_baseline_backend():
     assert res.shape[1] == 3
     assert res.dtype == np.float64
 
-def test_triton_backend_basic():
-    from benchmark.backend_triton import TritonBackend
+def test_pytorch_backend_basic():
+    from benchmark.backend_pytorch import PyTorchBackend
     from benchmark.backend_baseline import FlashCubicalBackend
     grid = generate_2d_grid(32, "uniform")
     baseline = FlashCubicalBackend().compute_ph(grid)
-    res = TritonBackend().compute_ph(grid)
+    res = PyTorchBackend().compute_ph(grid)
     assert verify_persistence(baseline, res) is True
