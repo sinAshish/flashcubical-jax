@@ -11,26 +11,35 @@ def compute_h0(image):
     births = image.flatten()
     
     r, c = jnp.meshgrid(jnp.arange(n), jnp.arange(m), indexing='ij')
-    u_h = (r[:, :-1] * m + c[:, :-1]).flatten()
-    v_h = (r[:, :-1] * m + c[:, 1:]).flatten()
-    u_v = (r[:-1, :] * m + c[:-1, :]).flatten()
-    v_v = (r[1:, :] * m + c[1:, :]).flatten()
-    
-    u = jnp.concatenate([u_h, u_v])
-    v_ = jnp.concatenate([v_h, v_v])
-    
+    u = jnp.concatenate([(r[:, :-1] * m + c[:, :-1]).flatten(), (r[:-1, :] * m + c[:-1, :]).flatten()])
+    v_ = jnp.concatenate([(r[:, :-1] * m + c[:, 1:]).flatten(), (r[1:, :] * m + c[1:, :]).flatten()])
     edge_vals = jnp.maximum(births[u], births[v_])
     
-    # Combine keys for argsort to speed up sorting without lexsort overhead
-    # In continuous noise, edge_vals are almost unique. 
-    # For identical values, lexsort breaks ties. We can try a single argsort for speed.
-    order = jnp.lexsort((jnp.maximum(u, v_), jnp.minimum(u, v_), edge_vals))
-    u = u[order]
-    v_ = v_[order]
-    edge_vals = edge_vals[order]
+    b_u = births[u]
+    b_v = births[v_]
+    diff = b_u - b_v
     
-    parent = jnp.arange(v)
-    deaths = jnp.full(v, jnp.inf)
+    younger = jnp.where(diff > 0, u, jnp.where(diff < 0, v_, jnp.maximum(u, v_)))
+    older = jnp.where(diff > 0, v_, jnp.where(diff < 0, u, jnp.minimum(u, v_)))
+    
+    # zero-persistence pruning via segmented min
+    best_older = jax.ops.segment_min(older, younger, num_segments=v)
+    MAX_INT = jnp.iinfo(best_older.dtype).max
+    has_zp = (best_older != MAX_INT)
+    
+    is_zp = (older == best_older[younger])
+    
+    # Push ZP edges to the end of the sort by setting their filtration value to infinity
+    edge_vals_pruned = jnp.where(is_zp, jnp.inf, edge_vals)
+    
+    order = jnp.lexsort((older, younger, edge_vals_pruned))
+    younger = younger[order]
+    older = older[order]
+    edge_vals_sorted = edge_vals_pruned[order]
+    
+    # Any vertex with a zero-persistence edge starts already merged to its best older neighbor
+    parent = jnp.where(has_zp, best_older, jnp.arange(v))
+    deaths = jnp.where(has_zp, births, jnp.inf)
     
     def find(p, i):
         def cond(state):
@@ -41,35 +50,36 @@ def compute_h0(image):
             nxt = p_arr[curr]
             p_arr = p_arr.at[curr].set(p_arr[nxt])
             return p_arr[curr], p_arr
-        
         root, p = jax.lax.while_loop(cond, body, (i, p))
         return root, p
 
     def step(state, edge_idx):
         p, d = state
-        ui = u[edge_idx]
-        vi = v_[edge_idx]
-        val = edge_vals[edge_idx]
+        ui = younger[edge_idx]
+        vi = older[edge_idx]
+        val = edge_vals_sorted[edge_idx]
         
-        root_u, p = find(p, ui)
-        root_v, p = find(p, vi)
-        
-        def do_union(p, d):
-            b_u = births[root_u]
-            b_v = births[root_v]
-            diff = b_u - b_v
+        def do_work():
+            root_u, p_new = find(p, ui)
+            root_v, p_new = find(p_new, vi)
             
-            older = jnp.where(diff < 0, root_u, jnp.where(diff > 0, root_v, jnp.maximum(root_u, root_v)))
-            younger = jnp.where(diff < 0, root_v, jnp.where(diff > 0, root_u, jnp.minimum(root_u, root_v)))
+            def do_union():
+                b_u = births[root_u]
+                b_v = births[root_v]
+                diff = b_u - b_v
+                older_root = jnp.where(diff < 0, root_u, jnp.where(diff > 0, root_v, jnp.maximum(root_u, root_v)))
+                younger_root = jnp.where(diff < 0, root_v, jnp.where(diff > 0, root_u, jnp.minimum(root_u, root_v)))
+                
+                p_out = p_new.at[younger_root].set(older_root)
+                d_out = d.at[younger_root].set(val)
+                return p_out, d_out
+                
+            return jax.lax.cond(root_u != root_v, do_union, lambda: (p_new, d))
             
-            p = p.at[younger].set(older)
-            d = d.at[younger].set(val)
-            return p, d
-            
-        p, d = jax.lax.cond(root_u != root_v, do_union, lambda p, d: (p, d), p, d)
+        p, d = jax.lax.cond(val != jnp.inf, do_work, lambda: (p, d))
         return (p, d), None
         
-    (final_p, final_d), _ = jax.lax.scan(step, (parent, deaths), jnp.arange(len(u)))
+    (final_p, final_d), _ = jax.lax.scan(step, (parent, deaths), jnp.arange(len(younger)))
     pairs = jnp.stack([births, final_d, jnp.zeros(v)], axis=1)
     return pairs
 
