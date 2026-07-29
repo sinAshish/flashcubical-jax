@@ -1,9 +1,8 @@
 import torch
 import numpy as np
-from typing import Any
+from typing import Any, Tuple, List
 from benchmark.backend_protocol import PHBackend
 
-@torch.jit.script
 def _compute_h0_torch(image: torch.Tensor) -> torch.Tensor:
     n, m = image.shape
     v = n * m
@@ -39,27 +38,33 @@ def _compute_h0_torch(image: torch.Tensor) -> torch.Tensor:
     v_ = v_[order3]
     edge_vals = edge_vals[order3]
     
-    parent = torch.arange(v, device=image.device)
-    deaths = torch.full((v,), float('inf'), device=image.device, dtype=image.dtype)
+    # Fast path for python lists
+    u_list: List[int] = u.tolist()
+    v_list: List[int] = v_.tolist()
+    edge_vals_list: List[float] = edge_vals.tolist()
+    births_list: List[float] = births.tolist()
     
-    for i in range(len(u)):
-        ui = int(u[i].item())
-        vi = int(v_[i].item())
-        val = edge_vals[i]
+    parent = list(range(v))
+    deaths = [float('inf')] * v
+    
+    for i in range(len(u_list)):
+        ui = u_list[i]
+        vi = v_list[i]
+        val = edge_vals_list[i]
         
         root_u = ui
-        while int(parent[root_u].item()) != root_u:
-            parent[root_u] = parent[int(parent[root_u].item())]
-            root_u = int(parent[root_u].item())
+        while parent[root_u] != root_u:
+            parent[root_u] = parent[parent[root_u]]
+            root_u = parent[root_u]
             
         root_v = vi
-        while int(parent[root_v].item()) != root_v:
-            parent[root_v] = parent[int(parent[root_v].item())]
-            root_v = int(parent[root_v].item())
+        while parent[root_v] != root_v:
+            parent[root_v] = parent[parent[root_v]]
+            root_v = parent[root_v]
             
         if root_u != root_v:
-            b_u = births[root_u]
-            b_v = births[root_v]
+            b_u = births_list[root_u]
+            b_v = births_list[root_v]
             diff = b_u - b_v
             
             if diff < 0:
@@ -75,7 +80,8 @@ def _compute_h0_torch(image: torch.Tensor) -> torch.Tensor:
             parent[younger] = older
             deaths[younger] = val
             
-    pairs = torch.stack([births, deaths, torch.zeros(v, device=image.device, dtype=image.dtype)], dim=1)
+    deaths_tensor = torch.tensor(deaths, dtype=image.dtype, device=image.device)
+    pairs = torch.stack([births, deaths_tensor, torch.zeros(v, device=image.device, dtype=image.dtype)], dim=1)
     return pairs
 
 class PyTorchBackend(PHBackend):
@@ -88,4 +94,4 @@ class PyTorchBackend(PHBackend):
         return res.cpu().numpy()
 
     def name(self) -> str:
-        return "PyTorch (JIT)"
+        return "PyTorch (Hybrid)"

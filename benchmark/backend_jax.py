@@ -35,19 +35,25 @@ def compute_h0(image):
             return p_arr[curr] != curr
         def body(state):
             curr, p_arr = state
+            nxt = p_arr[curr]
+            p_arr = p_arr.at[curr].set(p_arr[nxt])
             return p_arr[curr], p_arr
-        root, _ = jax.lax.while_loop(cond, body, (i, p))
-        return root
-
-    def step(i, state):
-        p, d = state
-        ui, vi, val = u[i], v_[i], edge_vals[i]
         
-        root_u = find(p, ui)
-        root_v = find(p, vi)
+        root, p = jax.lax.while_loop(cond, body, (i, p))
+        return root, p
+
+    def step(state, edge_idx):
+        p, d = state
+        ui = u[edge_idx]
+        vi = v_[edge_idx]
+        val = edge_vals[edge_idx]
+        
+        root_u, p = find(p, ui)
+        root_v, p = find(p, vi)
         
         def do_union(p, d):
-            b_u, b_v = births[root_u], births[root_v]
+            b_u = births[root_u]
+            b_v = births[root_v]
             diff = b_u - b_v
             
             older = jnp.where(diff < 0, root_u, jnp.where(diff > 0, root_v, jnp.maximum(root_u, root_v)))
@@ -57,9 +63,10 @@ def compute_h0(image):
             d = d.at[younger].set(val)
             return p, d
             
-        return jax.lax.cond(root_u != root_v, do_union, lambda p, d: (p, d), p, d)
+        p, d = jax.lax.cond(root_u != root_v, do_union, lambda p, d: (p, d), p, d)
+        return (p, d), None
         
-    final_p, final_d = jax.lax.fori_loop(0, len(u), step, (parent, deaths))
+    (final_p, final_d), _ = jax.lax.scan(step, (parent, deaths), jnp.arange(len(u)))
     pairs = jnp.stack([births, final_d, jnp.zeros(v)], axis=1)
     return pairs
 
