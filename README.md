@@ -11,26 +11,19 @@ Requirements
 * Python 3.9+
 * A C++ compiler with C++17 support (MSVC, GCC, or Clang)
 
-## Installation
+## Installation & Setup
 
-### Standard Installation
-```bash
-git clone git@github.com:T-prog123/FlashCubical.git
-cd FlashCubical
-pip install -e .
-```
-That is all. pip compiles the C++ extension automatically.
+Since both the native C++ library and the JAX/PyTorch backends are managed together using **`uv`**, the entire project—including C++ compilation, JAX, PyTorch, and test dependencies—can be set up in a single, unified command on your machine:
 
-### Benchmark Setup (uv)
-To install the dependencies and execute the GPU/CPU benchmarks:
 ```bash
 git clone https://github.com/sinAshish/flashcubical-jax.git
 cd flashcubical-jax
 git checkout jax-version
 
-# Sync and install JAX, PyTorch, and test dependencies
+# Sync and install JAX, PyTorch, compile C++ extension, and install test dependencies
 uv sync
 ```
+*Note: `uv` automatically invokes your compiler to compile the native C++ backend (`flash_cubical`) on the fly, while downloading and linking JAX and PyTorch into the isolated virtual environment.*
 
 ## Usage
 
