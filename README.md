@@ -70,10 +70,36 @@ NumPy array of shape `(n, 3)`, dtype float64.
 
 Draws a persistence diagram coloured by dimension. Returns a matplotlib `Axes`.
 
-## Running the tests
+## GPU Benchmarking Results
 
+A pluggable benchmarking suite is provided under the `benchmark/` folder to compare the native C++ implementation against our Parallel Forest implementations in JAX, PyTorch, Triton, and CUDA.
+
+The following benchmarks were evaluated locally on an **NVIDIA A100 GPU** computing the connected components (H0) of noisy grids.
+
+```text
+Grid Size    | Noise      | Backend                   | Time (ms)  | Accuracy
+------------------------------------------------------------------------------
+32x32        | uniform    | FlashCubical (C++)        | 0.09       | Baseline
+32x32        | uniform    | Triton (Parallel Forest)  | 0.10       | PASS
+32x32        | uniform    | CUDA C++                  | 0.11       | PASS
+32x32        | uniform    | PyTorch (Parallel Forest) | 1.55       | PASS
+32x32        | uniform    | JAX (Parallel Forest)     | 882.35     | PASS
+------------------------------------------------------------------------------
+64x64        | uniform    | FlashCubical (C++)        | 0.46       | Baseline
+64x64        | uniform    | Triton (Parallel Forest)  | 0.54       | PASS
+64x64        | uniform    | CUDA C++                  | 0.59       | PASS
+64x64        | uniform    | PyTorch (Parallel Forest) | 908.20     | PASS
+64x64        | uniform    | JAX (Parallel Forest)     | 3178.83    | PASS
+------------------------------------------------------------------------------
+128x128      | uniform    | FlashCubical (C++)        | 2.17       | Baseline
+128x128      | uniform    | CUDA C++                  | 2.32       | PASS
+128x128      | uniform    | Triton (Parallel Forest)  | 2.41       | PASS
+128x128      | uniform    | PyTorch (Parallel Forest) | 961.22     | PASS
+128x128      | uniform    | JAX (Parallel Forest)     | 15131.94   | PASS
 ```
-pip install pytest
-pytest tests/
+
+To run these benchmarks on your machine:
+```bash
+PYTHONPATH=. uv run python benchmark/run_benchmarks.py
 ```
 
