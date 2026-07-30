@@ -115,9 +115,16 @@ def compute_h0(image):
 _compute_jit = jax.jit(compute_h0)
 
 class JaxBackend(PHBackend):
-    def compute_ph(self, image: Any) -> np.ndarray:
-        arr = jnp.asarray(image, dtype=jnp.float64)
-        return np.array(_compute_jit(arr))
+    def prepare(self, image: Any) -> Any:
+        return jax.device_put(jnp.asarray(image, dtype=jnp.float64))
+
+    def sync(self):
+        pass # jax automatically syncs block_until_ready() if called
+
+    def compute_ph(self, arr: Any) -> Any:
+        res = _compute_jit(arr)
+        res.block_until_ready()
+        return res
 
     def name(self) -> str:
         return "JAX (Parallel Forest)"
