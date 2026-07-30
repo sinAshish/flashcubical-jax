@@ -5,7 +5,7 @@ import numpy as np
 from typing import Any
 from benchmark.backend_protocol import PHBackend
 
-def compute_h0(image):
+def phase_1_4(image):
     n, m = image.shape
     v = n * m
     births = image.flatten()
@@ -44,9 +44,6 @@ def compute_h0(image):
     parent, _ = jax.lax.while_loop(cond, body, (parent, jnp.full(v, -1)))
     
     # Phase 3: Extract and map saddle edges
-    # Push ZP edges to the end
-    edge_vals_pruned = jnp.where(is_zp, jnp.inf, edge_vals)
-    
     root_u = parent[younger]
     root_v = parent[older]
     
@@ -67,57 +64,82 @@ def compute_h0(image):
     older_s = older_s[order]
     saddle_vals = saddle_vals[order]
     
-    deaths = jnp.where(has_zp, births, jnp.inf)
-    
-    # Phase 5: Sequential Union-Find strictly on the sorted saddle edges
-    def find_uf(p, i):
-        def c(state):
-            curr, p_arr = state
-            return p_arr[curr] != curr
-        def b(state):
-            curr, p_arr = state
-            nxt = p_arr[curr]
-            p_arr = p_arr.at[curr].set(p_arr[nxt])
-            return p_arr[curr], p_arr
-        root, p = jax.lax.while_loop(c, b, (i, p))
-        return root, p
+    return younger_s, older_s, saddle_vals, births, has_zp
 
-    def step(state, edge_idx):
-        p, d = state
-        ui = younger_s[edge_idx]
-        vi = older_s[edge_idx]
-        val = saddle_vals[edge_idx]
-        
-        def do_work():
-            root_u, p_new = find_uf(p, ui)
-            root_v, p_new = find_uf(p_new, vi)
-            
-            def do_union():
-                b_u = births[root_u]
-                b_v = births[root_v]
-                diff = b_u - b_v
-                older_root = jnp.where(diff < 0, root_u, jnp.where(diff > 0, root_v, jnp.maximum(root_u, root_v)))
-                younger_root = jnp.where(diff < 0, root_v, jnp.where(diff > 0, root_u, jnp.minimum(root_u, root_v)))
-                
-                p_out = p_new.at[younger_root].set(older_root)
-                d_out = d.at[younger_root].set(val)
-                return p_out, d_out
-                
-            return jax.lax.cond(root_u != root_v, do_union, lambda: (p_new, d))
-            
-        p, d = jax.lax.cond(val != jnp.inf, do_work, lambda: (p, d))
-        return (p, d), None
-        
-    (final_p, final_d), _ = jax.lax.scan(step, (jnp.arange(v), deaths), jnp.arange(len(younger_s)))
-    pairs = jnp.stack([births, final_d, jnp.zeros(v)], axis=1)
-    return pairs
-
-_compute_jit = jax.jit(compute_h0)
+_jit_phases_1_4 = jax.jit(phase_1_4)
 
 class JaxBackend(PHBackend):
-    def compute_ph(self, image: Any) -> np.ndarray:
-        arr = jnp.asarray(image, dtype=jnp.float64)
-        return np.array(_compute_jit(arr))
+    def prepare(self, image: Any) -> Any:
+        return jax.device_put(jnp.asarray(image, dtype=jnp.float64))
+
+    def sync(self):
+        pass
+
+    def compute_ph(self, arr: Any) -> Any:
+        # Since `arr` comes from `prepare()`, its shape is accessed safely on host
+        n, m = arr.shape
+        v = n * m
+        
+        # Run JIT-compiled Phases 1-4 on GPU
+        out = _jit_phases_1_4(arr)
+        # Block until ready
+        jax.block_until_ready(out)
+        younger_s_jax, older_s_jax, saddle_vals_jax, births_jax, has_zp_jax = out
+        
+        # Convert to numpy arrays on CPU
+        younger_s = np.array(younger_s_jax)
+        older_s = np.array(older_s_jax)
+        saddle_vals = np.array(saddle_vals_jax)
+        births = np.array(births_jax)
+        has_zp = np.array(has_zp_jax)
+        
+        # Phase 5: Sequential Union-Find strictly on the minimal saddle topology on CPU
+        root_u_list = younger_s.tolist()
+        root_v_list = older_s.tolist()
+        saddle_vals_list = saddle_vals.tolist()
+        births_list = births.tolist()
+        
+        uf_parent = list(range(v))
+        deaths = [float('inf')] * v
+        
+        for i in range(len(root_u_list)):
+            val = saddle_vals_list[i]
+            if val == float('inf'):
+                break # All valid saddles processed (since jnp.inf is sorted to the end)
+                
+            ru = root_u_list[i]
+            while uf_parent[ru] != ru:
+                uf_parent[ru] = uf_parent[uf_parent[ru]]
+                ru = uf_parent[ru]
+                
+            rv = root_v_list[i]
+            while uf_parent[rv] != rv:
+                uf_parent[rv] = uf_parent[uf_parent[rv]]
+                rv = uf_parent[rv]
+                
+            if ru != rv:
+                bu = births_list[ru]
+                bv = births_list[rv]
+                diff_b = bu - bv
+                
+                if diff_b < 0:
+                    old_r = ru
+                    yng_r = rv
+                elif diff_b > 0:
+                    old_r = rv
+                    yng_r = ru
+                else:
+                    old_r = max(ru, rv)
+                    yng_r = min(ru, rv)
+                    
+                uf_parent[yng_r] = old_r
+                deaths[yng_r] = val
+                
+        deaths_arr = np.array(deaths, dtype=np.float64)
+        deaths_arr[has_zp] = births[has_zp]
+        
+        pairs = np.stack([births, deaths_arr, np.zeros(v)], axis=1)
+        return pairs
 
     def name(self) -> str:
         return "JAX (Parallel Forest)"
