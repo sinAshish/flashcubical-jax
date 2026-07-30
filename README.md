@@ -89,6 +89,27 @@ PYTHONPATH=. uv run pytest tests/test_benchmarks.py -v
 
 A pluggable benchmarking suite is provided under the `benchmark/` folder to compare the native C++ implementation against our purely tensor-native **Parallel Forest** implementations in JAX and PyTorch. 
 
+### Benchmark Results (NVIDIA A100 GPU)
+The following benchmarks were evaluated locally on an **NVIDIA A100-PCIE-40GB GPU**, comparing CPU sequential performance (C++) against tensor-native GPU parallel execution:
+
+```text
+Grid Size    | Noise      | Backend                   | Time (ms)  | Accuracy
+------------------------------------------------------------------------------
+32x32        | uniform    | FlashCubical (C++)        | 0.07       | Baseline
+32x32        | uniform    | PyTorch (Parallel Forest) | 9.71       | PASS
+32x32        | uniform    | JAX (Parallel Forest)     | 906.14     | PASS
+------------------------------------------------------------------------------
+64x64        | uniform    | FlashCubical (C++)        | 0.64       | Baseline
+64x64        | uniform    | PyTorch (Parallel Forest) | 22.30      | PASS
+64x64        | uniform    | JAX (Parallel Forest)     | 3714.58    | PASS
+------------------------------------------------------------------------------
+128x128      | uniform    | FlashCubical (C++)        | 2.22       | Baseline
+128x128      | uniform    | PyTorch (Parallel Forest) | 21.24      | PASS
+128x128      | uniform    | JAX (Parallel Forest)     | 14618.15   | PASS
+```
+
+*Note: JAX performs poorly because sequential pointer-chasing in XLA (via `jax.lax.scan` and `jax.lax.while_loop`) severely limits GPU parallelism. PyTorch is faster than JAX because it offloads the final sequential Union-Find loop back to the host CPU, but it still incurs CPU-GPU memory transfer overheads and remains slower than the purely optimized C++ CPU implementation.*
+
 ### Benchmark Results (macOS CPU)
 The following benchmarks were evaluated locally on **macOS (Apple Silicon CPU)**. This is a CPU-bound execution (which lacks CUDA hardware acceleration for tensor sorting, but serves as a solid baseline):
 
@@ -137,6 +158,6 @@ Because sequential Union-Find is highly unroll-heavy and slow in JAX's XLA compi
 
 ### Differences and Trade-offs
 - **CPU Performance**: C++ is significantly faster on CPUs because CPUs are designed for sequential pointer chasing and avoid the massive $O(N \log N)$ sorting step on the 2,000,000 edges required by vector engines.
-- **GPU Scale-out**: On an NVIDIA GPU (CUDA), the JAX sorting and `segment_min` operations will run in **microseconds** on thousands of CUDA cores. While C++ is stuck sequentially executing on a single CPU thread, the JAX Parallel Forest implementation will scale-out massively and outperform C++ on extremely large resolutions.
+- **GPU Bottlenecks**: While sorting and `segment_min` scale brilliantly on CUDA cores, the final **sequential Union-Find phase** heavily penalizes purely compiled tensor frameworks like JAX. Enforcing sequential dependency loops (`jax.lax.while_loop`) onto GPU hardware destroys its massive parallelism, making JAX take over 14 seconds for a 128x128 grid. PyTorch avoids this entirely by shifting the sequential loop back to Python on the host CPU, drastically improving its performance (though still slower than native C++ due to memory transfer overheads).
 
 
