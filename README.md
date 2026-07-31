@@ -57,7 +57,7 @@ The following figure displays a complete 3-dimensional Topological Data Analysis
 ![3D Torus TDA Pipeline](doc/images/torus_3d_tda.png)
 
 ### Description of the Panels
-1.  **3D Hollow Torus Surface**: Shows the 3D voxel contour representation of the hollow torus shell of major radius $R=1.2$ and minor radius $r=0.5$. The shell has a low filtration value ($\approx 0.0$), while the inside of the tube, the central hole, and the exterior space have higher values ($\ge 1.0$).
+1.  **3D Hollow Torus Surface**: Shows the 3D voxel contour representation of the hollow torus shell of major radius $R=1.3$ and thin minor radius $r=0.25$. The shell has a low filtration value ($\approx 0.0$), while the inside of the tube, the central hole, and the exterior space have higher values ($\ge 1.0$).
 2.  **3D Persistence Diagram (H0, H1, H2)**: Computes the births and deaths of topological structures across all three dimensions simultaneously:
     *   **$H_0$ (Connected Components)**: Born along the low-value torus shell valley. $1$ robust component (born at $\approx 0.0$, dying at $+\infty$) persists.
     *   **$H_1$ (Loops / Tunnels)**: Two distinct topological tunnels are born at $t \approx 0.0$: one loop wraps around the main ring, and another wraps inside the tube.
