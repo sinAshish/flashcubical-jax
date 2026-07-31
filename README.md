@@ -50,6 +50,22 @@ ph = fc.compute(volume)               # computes H0, H1, H2
 ph = fc.compute(volume, h1=False)     # skip H1, only H0 and H2
 ```
 
+## Topological Visualization (Donut Example)
+
+The following figure displays a complete Topological Data Analysis (TDA) pipeline of a $64 \times 64$ synthetic donut-like scalar field (annulus) evaluated using `FlashCubical`:
+
+![Donut TDA Pipeline](doc/images/donut_tda.png)
+
+### Description of the Panels
+1.  **Original Donut (Scalar Grid)**: A 2D Gaussian ring where the ring valley has a low filtration value ($\approx 0.0$) and the center mountain and exterior have higher values ($\ge 1.0$).
+2.  **Persistence Diagram (H0 & H1)**: Computes the births and deaths of topological structures as we sweep from low to high filtration values.
+    *   **$H_0$ (Connected Components)**: Born along the low-value ring valley. Only $1$ robust component (born at $\approx 0.0$, dying at $+\infty$) persists throughout the entire filtration.
+    *   **$H_1$ (Loops / Tunnels)**: A robust topological loop is born as the ring valley fully closes, and it dies when the central mountain is completely filled in.
+3.  **Betti Curves ($\beta_0$ and $\beta_1$)**: Displays Betti numbers as a function of filtration value ($t$).
+    *   $\beta_0(t)$ represents the count of active connected components.
+    *   $\beta_1(t)$ represents the count of active loops.
+    *   The curves beautifully highlight the topological signature of a torus ($\beta_0 = 1$ and $\beta_1 = 1$) spanning between $t \approx 0.1$ and $t \approx 0.9$.
+
 ## API
 
 ### `fc.compute(x, min_persistence=0.0, h1=True)`
