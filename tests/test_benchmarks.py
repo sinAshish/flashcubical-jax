@@ -4,6 +4,8 @@ from benchmark.benchmark_utils import generate_2d_grid, verify_persistence
 from benchmark.backend_baseline import FlashCubicalBackend
 from benchmark.backend_jax import JaxBackend
 from benchmark.backend_pytorch import PyTorchBackend
+from benchmark.backend_triton import TritonBackend
+from benchmark.backend_cuda import CudaBackend
 
 # --- Utils Tests ---
 
@@ -59,7 +61,7 @@ def test_baseline_backend():
 
 @pytest.fixture
 def backends():
-    return [JaxBackend(), PyTorchBackend()]
+    return [JaxBackend(), PyTorchBackend(), TritonBackend(), CudaBackend()]
 
 @pytest.fixture
 def baseline_backend():

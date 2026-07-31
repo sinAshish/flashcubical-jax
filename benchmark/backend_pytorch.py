@@ -4,17 +4,11 @@ from typing import Any
 from benchmark.backend_protocol import PHBackend
 
 class PyTorchBackend(PHBackend):
-    def prepare(self, image: Any) -> Any:
+    def compute_ph(self, image: Any) -> np.ndarray:
         arr = torch.tensor(image, dtype=torch.float64)
         if torch.cuda.is_available():
             arr = arr.cuda()
-        return arr
-
-    def sync(self):
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-
-    def compute_ph(self, arr: Any) -> Any:
+            
         n, m = arr.shape
         v = n * m
         births = arr.flatten()
@@ -70,14 +64,14 @@ class PyTorchBackend(PHBackend):
         older_s = torch.where(diff_s > 0, root_v, torch.where(diff_s < 0, root_u, torch.minimum(root_u, root_v)))
         
         # Phase 4: Stable Sort Saddle Edges
-        order = torch.argsort(saddle_vals, stable=True)
+        # PyTorch argsort on float64 is very slow, we use numpy for sorting
+        order = torch.from_numpy(np.argsort(saddle_vals.cpu().numpy(), kind='stable')).to(arr.device)
         
         younger_s = younger_s[order]
         older_s = older_s[order]
         saddle_vals = saddle_vals[order]
         
         # Phase 5: Sequential Union-Find strictly on the minimal saddle topology
-        # We must pull this back to CPU because Python loops over GPU tensors trigger microscopic kernel launches
         root_u_list = younger_s.tolist()
         root_v_list = older_s.tolist()
         saddle_vals_list = saddle_vals.tolist()
@@ -119,7 +113,7 @@ class PyTorchBackend(PHBackend):
         deaths_tensor[~no_best] = births[~no_best]
         pairs = torch.stack([births, deaths_tensor, torch.zeros(v, device=arr.device, dtype=arr.dtype)], dim=1)
         
-        return pairs
+        return pairs.cpu().numpy()
 
     def name(self) -> str:
         return "PyTorch (Parallel Forest)"

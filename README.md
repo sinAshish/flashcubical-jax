@@ -74,15 +74,37 @@ NumPy array of shape `(n, 3)`, dtype float64.
 
 Draws a persistence diagram coloured by dimension. Returns a matplotlib `Axes`.
 
-## Running the tests
+## GPU Benchmarking Results
 
+A pluggable benchmarking suite is provided under the `benchmark/` folder to compare the native C++ implementation against our Parallel Forest implementations in JAX, PyTorch, Triton, and CUDA.
+
+The following benchmarks were evaluated locally on an **NVIDIA A100 GPU** computing the connected components (H0) of noisy grids.
+
+```text
+Grid Size    | Noise      | Backend                   | Time (ms)  | Accuracy
+------------------------------------------------------------------------------
+32x32        | uniform    | FlashCubical (C++)        | 0.07       | Baseline
+32x32        | uniform    | CUDA C++                  | 0.07       | PASS
+32x32        | uniform    | Triton (Parallel Forest)  | 0.09       | PASS
+32x32        | uniform    | PyTorch (Parallel Forest) | 1.84       | PASS
+32x32        | uniform    | JAX (Parallel Forest)     | 4.89       | PASS
+------------------------------------------------------------------------------
+64x64        | uniform    | FlashCubical (C++)        | 0.44       | Baseline
+64x64        | uniform    | CUDA C++                  | 0.47       | PASS
+64x64        | uniform    | Triton (Parallel Forest)  | 0.54       | PASS
+64x64        | uniform    | PyTorch (Parallel Forest) | 7.67       | PASS
+64x64        | uniform    | JAX (Parallel Forest)     | 8.53       | PASS
+------------------------------------------------------------------------------
+128x128      | uniform    | FlashCubical (C++)        | 2.01       | Baseline
+128x128      | uniform    | CUDA C++                  | 2.02       | PASS
+128x128      | uniform    | Triton (Parallel Forest)  | 2.04       | PASS
+128x128      | uniform    | JAX (Parallel Forest)     | 16.12      | PASS
+128x128      | uniform    | PyTorch (Parallel Forest) | 27.71      | PASS
+```
+
+To run these benchmarks on your machine:
 ```bash
-# Run baseline tests
-pip install pytest
-pytest tests/
-
-# Run GPU/CPU benchmark suite tests
-PYTHONPATH=. uv run pytest tests/test_benchmarks.py -v
+PYTHONPATH=. uv run python benchmark/run_benchmarks.py
 ```
 
 ## JAX & PyTorch Benchmarks

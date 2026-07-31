@@ -5,7 +5,7 @@ The benchmark suite is a standalone Python framework designed to compare the exe
 
 ## Components and Responsibilities
 - **Data Generator**: Creates 2D and 3D scalar grids of fixed sizes (2D: 128x128, 256x256, 512x512, 1024x1024; 3D: 32x32x32, 64x64x64, 128x128x128). Data will consist of uniform noise in [0, 1] and standard Gaussian blobs to test best/average/worst-case inputs.
-- **Backend Protocol**: A common interface (`compute_ph(image) -> Any`) that all implementations must satisfy. The input can be a standard NumPy array or a framework-specific tensor (e.g., PyTorch Tensor, JAX Array) in either `float32` or `float64` to match typical workflows. The verification engine will homogenize the outputs by converting them back to a NumPy `float64` array of shape `(n, 3)` (columns: `birth`, `death`, and `homology dimension`) before comparing them against the `flash_cubical` `0.1.0` baseline.
+- **Backend Protocol**: A common interface (`compute_ph(image) -> np.ndarray`) that all implementations must satisfy. The `flash_cubical` baseline is version `0.1.0`. The interface expects the input as a C-contiguous `float64` array and returns a `float64` NumPy array of shape `(n, 3)` where columns are `birth`, `death`, and `homology dimension`.
 - **Verification Engine**: Compares the resulting persistence pairs against the C++ baseline. It matches births, deaths, and dimensions, ignoring local zero-persistence pairs.
 - **Profiling Engine**: Measures wall-clock execution time, separating GPU memory transfer, JIT/compilation overhead (warm-up runs), and pure execution latency.
 
