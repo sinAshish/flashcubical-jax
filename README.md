@@ -1,6 +1,8 @@
-# FlashCubical
+# FlashCubical-JAX
 
-Fast V-filtration cubical persistent homology for 2D and 3D scalar grids induced by images, impleneting the ideas proposed in https://arxiv.org/abs/2606.04801.
+Fast V-filtration cubical persistent homology for 2D and 3D scalar grids induced by images, impleneting the ideas proposed in [arXiv:2606.04801](https://arxiv.org/abs/2606.04801).
+
+This repository is a fork/extension of the original highly-optimized CPU implementation of [**FlashCubical** (by T-prog123)](https://github.com/T-prog123/FlashCubical). It introduces purely tensor-native and GPU-accelerated backends (in JAX, PyTorch, Triton, and CUDA) for massive parallelization.
 
 Computes H0 (connected components), H1 (loops / tunnels), and H2 (voids) using a lower-star filtration with a precomputed lookup table for local zero-persistence pairs.
 
