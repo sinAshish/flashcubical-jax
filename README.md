@@ -81,25 +81,43 @@ A pluggable benchmarking suite is provided under the `benchmark/` folder to comp
 The following benchmarks were evaluated locally on an **NVIDIA A100-PCIE-40GB GPU** computing the connected components (H0) of noisy grids.
 
 ```text
-Grid Size    | Noise      | Backend                   | Time (ms)  | Accuracy
-------------------------------------------------------------------------------
-32x32        | uniform    | FlashCubical (C++)        | 0.07       | Baseline
-32x32        | uniform    | CUDA C++                  | 0.07       | PASS
-32x32        | uniform    | Triton (Parallel Forest)  | 0.09       | PASS
-32x32        | uniform    | PyTorch (Parallel Forest) | 1.84       | PASS
-32x32        | uniform    | JAX (Parallel Forest)     | 4.89       | PASS
-------------------------------------------------------------------------------
-64x64        | uniform    | FlashCubical (C++)        | 0.44       | Baseline
-64x64        | uniform    | CUDA C++                  | 0.47       | PASS
-64x64        | uniform    | Triton (Parallel Forest)  | 0.54       | PASS
-64x64        | uniform    | PyTorch (Parallel Forest) | 7.67       | PASS
-64x64        | uniform    | JAX (Parallel Forest)     | 8.53       | PASS
-------------------------------------------------------------------------------
-128x128      | uniform    | FlashCubical (C++)        | 2.01       | Baseline
-128x128      | uniform    | CUDA C++                  | 2.02       | PASS
-128x128      | uniform    | Triton (Parallel Forest)  | 2.04       | PASS
-128x128      | uniform    | JAX (Parallel Forest)     | 16.12      | PASS
-128x128      | uniform    | PyTorch (Parallel Forest) | 27.71      | PASS
+Grid Size    | Noise      | Backend                   | Prep (ms) | Compute (ms) | Accuracy
+--------------------------------------------------------------------------------------------
+32x32        | uniform    | FlashCubical (C++)        | 0.01      | 0.07         | Baseline
+32x32        | uniform    | CUDA C++                  | 0.01      | 0.07         | PASS
+32x32        | uniform    | Triton (Parallel Forest)  | 0.01      | 0.08         | PASS
+32x32        | uniform    | PyTorch (Parallel Forest) | 3.08      | 2.03         | PASS
+32x32        | uniform    | JAX (Parallel Forest)     | 693.19    | 4.65         | PASS
+--------------------------------------------------------------------------------------------
+64x64        | uniform    | FlashCubical (C++)        | 0.00      | 0.44         | Baseline
+64x64        | uniform    | CUDA C++                  | 0.00      | 0.48         | PASS
+64x64        | uniform    | Triton (Parallel Forest)  | 0.01      | 0.55         | PASS
+64x64        | uniform    | PyTorch (Parallel Forest) | 0.18      | 7.89         | PASS
+64x64        | uniform    | JAX (Parallel Forest)     | 0.24      | 9.27         | PASS
+--------------------------------------------------------------------------------------------
+128x128      | uniform    | FlashCubical (C++)        | 0.00      | 2.01         | Baseline
+128x128      | uniform    | CUDA C++                  | 0.00      | 2.07         | PASS
+128x128      | uniform    | Triton (Parallel Forest)  | 0.03      | 2.07         | PASS
+128x128      | uniform    | JAX (Parallel Forest)     | 0.25      | 15.50        | PASS
+128x128      | uniform    | PyTorch (Parallel Forest) | 0.17      | 40.49        | PASS
+--------------------------------------------------------------------------------------------
+256x256      | uniform    | FlashCubical (C++)        | 0.00      | 8.23         | Baseline
+256x256      | uniform    | Triton (Parallel Forest)  | 0.01      | 11.07        | PASS
+256x256      | uniform    | CUDA C++                  | 0.00      | 12.63        | PASS
+256x256      | uniform    | JAX (Parallel Forest)     | 0.40      | 63.13        | PASS
+256x256      | uniform    | PyTorch (Parallel Forest) | 0.90      | 88.79        | PASS
+--------------------------------------------------------------------------------------------
+512x512      | uniform    | FlashCubical (C++)        | 0.01      | 34.41        | Baseline
+512x512      | uniform    | Triton (Parallel Forest)  | 0.01      | 38.72        | PASS
+512x512      | uniform    | CUDA C++                  | 0.00      | 39.11        | PASS
+512x512      | uniform    | JAX (Parallel Forest)     | 0.89      | 281.30       | PASS
+512x512      | uniform    | PyTorch (Parallel Forest) | 15.66     | 320.37       | PASS
+--------------------------------------------------------------------------------------------
+1024x1024    | uniform    | FlashCubical (C++)        | 0.02      | 155.60       | Baseline
+1024x1024    | uniform    | Triton (Parallel Forest)  | 0.09      | 174.36       | PASS
+1024x1024    | uniform    | CUDA C++                  | 0.14      | 177.65       | PASS
+1024x1024    | uniform    | JAX (Parallel Forest)     | 9.37      | 1330.98      | PASS
+1024x1024    | uniform    | PyTorch (Parallel Forest) | 7.54      | 1426.12      | PASS
 ```
 
 To run these benchmarks on your machine:

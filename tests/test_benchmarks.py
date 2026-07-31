@@ -75,7 +75,11 @@ def test_backends_accuracy_random(backends, baseline_backend, size, noise_type):
     baseline_res = baseline_backend.compute_ph(grid)
     
     for backend in backends:
-        res = backend.compute_ph(grid)
+        prepared_grid = backend.prepare(grid) if hasattr(backend, "prepare") else grid
+        res = backend.compute_ph(prepared_grid)
+        if hasattr(res, "cpu"): res = res.cpu().numpy()
+        elif hasattr(res, "device_buffer"): res = np.array(res)
+        elif not isinstance(res, np.ndarray): res = np.array(res)
         assert verify_persistence(baseline_res, res), f"{backend.name()} failed on {noise_type} {size}x{size}"
 
 def test_backends_accuracy_flat_image(backends, baseline_backend):
@@ -85,7 +89,11 @@ def test_backends_accuracy_flat_image(backends, baseline_backend):
     baseline_res = baseline_backend.compute_ph(grid)
     
     for backend in backends:
-        res = backend.compute_ph(grid)
+        prepared_grid = backend.prepare(grid) if hasattr(backend, "prepare") else grid
+        res = backend.compute_ph(prepared_grid)
+        if hasattr(res, "cpu"): res = res.cpu().numpy()
+        elif hasattr(res, "device_buffer"): res = np.array(res)
+        elif not isinstance(res, np.ndarray): res = np.array(res)
         assert verify_persistence(baseline_res, res), f"{backend.name()} failed on flat image"
 
 def test_backends_accuracy_checkerboard(backends, baseline_backend):
@@ -95,7 +103,11 @@ def test_backends_accuracy_checkerboard(backends, baseline_backend):
     baseline_res = baseline_backend.compute_ph(grid)
     
     for backend in backends:
-        res = backend.compute_ph(grid)
+        prepared_grid = backend.prepare(grid) if hasattr(backend, "prepare") else grid
+        res = backend.compute_ph(prepared_grid)
+        if hasattr(res, "cpu"): res = res.cpu().numpy()
+        elif hasattr(res, "device_buffer"): res = np.array(res)
+        elif not isinstance(res, np.ndarray): res = np.array(res)
         assert verify_persistence(baseline_res, res), f"{backend.name()} failed on checkerboard image"
 
 def test_backends_accuracy_single_peak(backends, baseline_backend):
@@ -105,5 +117,9 @@ def test_backends_accuracy_single_peak(backends, baseline_backend):
     baseline_res = baseline_backend.compute_ph(grid)
     
     for backend in backends:
-        res = backend.compute_ph(grid)
+        prepared_grid = backend.prepare(grid) if hasattr(backend, "prepare") else grid
+        res = backend.compute_ph(prepared_grid)
+        if hasattr(res, "cpu"): res = res.cpu().numpy()
+        elif hasattr(res, "device_buffer"): res = np.array(res)
+        elif not isinstance(res, np.ndarray): res = np.array(res)
         assert verify_persistence(baseline_res, res), f"{backend.name()} failed on single peak"
