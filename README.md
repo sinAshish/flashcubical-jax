@@ -50,21 +50,23 @@ ph = fc.compute(volume)               # computes H0, H1, H2
 ph = fc.compute(volume, h1=False)     # skip H1, only H0 and H2
 ```
 
-## Topological Visualization (Donut Example)
+## Topological Visualization (3D Hollow Torus Example)
 
-The following figure displays a complete Topological Data Analysis (TDA) pipeline of a $64 \times 64$ synthetic donut-like scalar field (annulus) evaluated using `FlashCubical`:
+The following figure displays a complete 3-dimensional Topological Data Analysis (TDA) pipeline of a $64 \times 64 \times 64$ synthetic hollow torus volume evaluated using `FlashCubical`:
 
-![Donut TDA Pipeline](doc/images/donut_tda.png)
+![3D Torus TDA Pipeline](doc/images/torus_3d_tda.png)
 
 ### Description of the Panels
-1.  **Original Donut (Scalar Grid)**: A 2D Gaussian ring where the ring valley has a low filtration value ($\approx 0.0$) and the center mountain and exterior have higher values ($\ge 1.0$).
-2.  **Persistence Diagram (H0 & H1)**: Computes the births and deaths of topological structures as we sweep from low to high filtration values.
-    *   **$H_0$ (Connected Components)**: Born along the low-value ring valley. Only $1$ robust component (born at $\approx 0.0$, dying at $+\infty$) persists throughout the entire filtration.
-    *   **$H_1$ (Loops / Tunnels)**: A robust topological loop is born as the ring valley fully closes, and it dies when the central mountain is completely filled in.
-3.  **Betti Curves ($\beta_0$ and $\beta_1$)**: Displays Betti numbers as a function of filtration value ($t$).
-    *   $\beta_0(t)$ represents the count of active connected components.
-    *   $\beta_1(t)$ represents the count of active loops.
-    *   The curves beautifully highlight the topological signature of a torus ($\beta_0 = 1$ and $\beta_1 = 1$) spanning between $t \approx 0.1$ and $t \approx 0.9$.
+1.  **3D Hollow Torus Surface**: Shows the 3D voxel contour representation of the hollow torus shell of major radius $R=1.2$ and minor radius $r=0.5$. The shell has a low filtration value ($\approx 0.0$), while the inside of the tube, the central hole, and the exterior space have higher values ($\ge 1.0$).
+2.  **3D Persistence Diagram (H0, H1, H2)**: Computes the births and deaths of topological structures across all three dimensions simultaneously:
+    *   **$H_0$ (Connected Components)**: Born along the low-value torus shell valley. $1$ robust component (born at $\approx 0.0$, dying at $+\infty$) persists.
+    *   **$H_1$ (Loops / Tunnels)**: Two distinct topological tunnels are born at $t \approx 0.0$: one loop wraps around the main ring, and another wraps inside the tube.
+    *   **$H_2$ (Enclosed Voids)**: A robust 3D void is born at $t \approx 0.0$ since the torus shell is completely closed, enclosing the air inside. It dies when the inside of the tube is filled.
+3.  **3D Betti Curves ($\beta_0, \beta_1, \beta_2$)**: Displays Betti numbers as a function of filtration value ($t$).
+    *   $\beta_0(t)$ counts the active connected components.
+    *   $\beta_1(t)$ counts the active 1D loops/tunnels.
+    *   $\beta_2(t)$ counts the active 2D enclosed voids.
+    *   The curves beautifully capture the topological invariants of a hollow torus ($\beta_0 = 1, \beta_1 = 2, \beta_2 = 1$) simultaneously spanning between $t \approx 0.0$ and $t \approx 0.25$.
 
 ## API
 
