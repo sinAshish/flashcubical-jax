@@ -76,9 +76,9 @@ Draws a persistence diagram coloured by dimension. Returns a matplotlib `Axes`.
 
 ## GPU Benchmarking Results
 
-A pluggable benchmarking suite is provided under the `benchmark/` folder to compare the native C++ implementation against our Parallel Forest implementations in JAX, PyTorch, Triton, and CUDA.
+A pluggable benchmarking suite is provided under the `benchmark/` folder to compare the native C++ implementation against our Parallel Forest implementations in JAX, PyTorch, Triton, and CUDA C++.
 
-The following benchmarks were evaluated locally on an **NVIDIA A100 GPU** computing the connected components (H0) of noisy grids.
+The following benchmarks were evaluated locally on an **NVIDIA A100-PCIE-40GB GPU** computing the connected components (H0) of noisy grids.
 
 ```text
 Grid Size    | Noise      | Backend                   | Time (ms)  | Accuracy
@@ -106,31 +106,6 @@ To run these benchmarks on your machine:
 ```bash
 PYTHONPATH=. uv run python benchmark/run_benchmarks.py
 ```
-
-## JAX & PyTorch Benchmarks
-
-A pluggable benchmarking suite is provided under the `benchmark/` folder to compare the native C++ implementation against our purely tensor-native **Parallel Forest** implementations in JAX and PyTorch. 
-
-### Benchmark Results (NVIDIA A100 GPU)
-The following benchmarks were evaluated locally on an **NVIDIA A100-PCIE-40GB GPU**, comparing CPU sequential performance (C++) against tensor-native GPU parallel execution:
-
-```text
-Grid Size    | Noise      | Backend                   | Time (ms)  | Accuracy
-------------------------------------------------------------------------------
-32x32        | uniform    | FlashCubical (C++)        | 0.07       | Baseline
-32x32        | uniform    | PyTorch (Parallel Forest) | 2.24       | PASS
-32x32        | uniform    | JAX (Parallel Forest)     | 142.24     | PASS
-------------------------------------------------------------------------------
-64x64        | uniform    | FlashCubical (C++)        | 0.46       | Baseline
-64x64        | uniform    | PyTorch (Parallel Forest) | 4.36       | PASS
-64x64        | uniform    | JAX (Parallel Forest)     | 612.97     | PASS
-------------------------------------------------------------------------------
-128x128      | uniform    | FlashCubical (C++)        | 2.18       | Baseline
-128x128      | uniform    | PyTorch (Parallel Forest) | 12.57      | PASS
-128x128      | uniform    | JAX (Parallel Forest)     | 2610.62    | PASS
-```
-
-*Note: JAX performs poorly because sequential pointer-chasing in XLA (via `jax.lax.scan` and `jax.lax.while_loop`) severely limits GPU parallelism. PyTorch is faster than JAX because it offloads the final sequential Union-Find loop back to the host CPU, but it still incurs CPU-GPU memory transfer overheads and remains slower than the purely optimized C++ CPU implementation.*
 
 ### Benchmark Results (macOS CPU)
 The following benchmarks were evaluated locally on **macOS (Apple Silicon CPU)**. This is a CPU-bound execution (which lacks CUDA hardware acceleration for tensor sorting, but serves as a solid baseline):
@@ -176,10 +151,12 @@ Because sequential Union-Find is highly unroll-heavy and slow in JAX's XLA compi
 1. **Parallel Zero-Persistence Flow (Pruning)**: Instead of a sequential loop, we find the steepest descending neighbor for all $V$ vertices simultaneously in a single tensor operation using JAX's `segment_min`. This establishes a directed "gradient forest" mapping younger vertices directly to older ones.
 2. **Parallel Pointer Jumping (Path Doubling)**: We flatten this entire zero-persistence forest in parallel using path doubling (`parent = parent[parent]`). Because the path lengths halve at each step, exactly $21$ iterations are guaranteed to flatten a $1024\times1024$ grid, snapping all vertices to their local minimum root. No loops!
 3. **Saddle Edge Extraction**: Edges that are not part of the zero-persistence forest are "saddles" that merge components. We filter out the internal ones and map the saddles directly to the flattened roots.
-4. **Stable Sort & Scan**: We lexicographically sort the remaining saddles and use a JAX `lax.scan` to merge the components in filtration order.
+4. **Stable Sort**: We lexicographically sort the remaining saddles in parallel.
+5. **Sequential CPU Offload**: Because sequential pointer-chasing on GPU architectures degrades performance severely, we transfer the sorted subset of saddles back to the host and compute the final Union-Find loop on the CPU (taking milliseconds instead of seconds).
 
 ### Differences and Trade-offs
-- **CPU Performance**: C++ is significantly faster on CPUs because CPUs are designed for sequential pointer chasing and avoid the massive $O(N \log N)$ sorting step on the 2,000,000 edges required by vector engines.
-- **GPU Bottlenecks**: While sorting and `segment_min` scale brilliantly on CUDA cores, the final **sequential Union-Find phase** heavily penalizes purely compiled tensor frameworks like JAX. Enforcing sequential dependency loops (`jax.lax.while_loop`) onto GPU hardware destroys its massive parallelism, making JAX take over 2 seconds for a 128x128 grid. PyTorch avoids this entirely by shifting the sequential loop back to Python on the host CPU, drastically improving its performance (though still slower than native C++ due to memory transfer overheads).
+- **CPU Performance**: Native C++ is significantly faster on pure CPUs because it naturally executes sequential pointer chasing without incurring memory transfer or massive $O(N \log N)$ sorting penalties on all vertices.
+- **GPU Bottlenecks**: While sorting and `segment_min` scale brilliantly on CUDA cores (finishing in sub-milliseconds), the final **sequential Union-Find phase** heavily penalizes interpreted frameworks. In JAX and PyTorch, this is solved by offloading Phase 5 to Python CPU loops, reducing the total latency down to ~15-27ms.
+- **True GPU Domination**: Our newly introduced **Triton** and **CUDA C++** kernels sidestep this entirely by executing the sequential Union-Find locally on the GPU inside custom hardware kernels, drastically avoiding the Python / PCIe transition overhead. They match the native C++ CPU implementation speeds (~2ms) and establish actual GPU scalability!
 
 
