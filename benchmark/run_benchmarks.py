@@ -1,11 +1,11 @@
 import time
 import numpy as np
-from benchmark.benchmark_utils import generate_2d_grid, verify_persistence
-from benchmark.backend_baseline import FlashCubicalBackend
-from benchmark.backend_jax import JaxBackend
-from benchmark.backend_pytorch import PyTorchBackend
-from benchmark.backend_triton import TritonBackend
-from benchmark.backend_cuda import CudaBackend
+from flash_cubical.backends.benchmark_utils import generate_2d_grid, verify_persistence
+from flash_cubical.backends.backend_baseline import FlashCubicalBackend
+from flash_cubical.backends.backend_jax import JaxBackend
+from flash_cubical.backends.backend_pytorch import PyTorchBackend
+from flash_cubical.backends.backend_triton import TritonBackend
+from flash_cubical.backends.backend_cuda import CudaBackend
 
 def run_suite():
     backends = [
