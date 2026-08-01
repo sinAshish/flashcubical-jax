@@ -68,6 +68,23 @@ The following figure displays a complete 3-dimensional Topological Data Analysis
     *   $\beta_2(t)$ counts the active 2D enclosed voids.
     *   The curves beautifully capture the topological invariants of a hollow torus ($\beta_0 = 1, \beta_1 = 2, \beta_2 = 1$) simultaneously spanning between $t \approx 0.0$ and $t \approx 0.25$.
 
+## Topological Visualization (2D Yin-Yang Spiral Example)
+
+The following figure displays a complete 2-dimensional Topological Data Analysis (TDA) pipeline of a $128 \times 128$ synthetic Yin-Yang double-spiral scalar field evaluated using `FlashCubical`:
+
+![2D Spiral TDA Pipeline](doc/images/spiral_2d_tda.png)
+
+### Description of the Panels
+1.  **2D Yin-Yang Spiral Point Cloud**: A 2D point cloud representing the valleys (low filtration values $\approx 0.0$) of two intertwined spiral arms. The points are colored using a swirling **rainbow color palette** mapped to their polar sweep angle.
+2.  **2D Persistence Diagram (H0 & H1)**: Computes the births and deaths of structures as the filtration sweeps from low to high values:
+    *   **$H_0$ (Connected Components)**: Two independent local minima are born at $t \approx 0.0$ corresponding to the two disjoint spiral valleys. As they grow wider, they eventually touch and merge into a single component.
+    *   **$H_1$ (Loops / Holes)**: Because the spirals wind tightly around each other, minor loop structures can briefly appear and die as the corridors bleed together.
+3.  **2D Betti Curves ($\beta_0$ and $\beta_1$)**: Displays Betti numbers as a function of filtration value ($t$).
+    *   $\beta_0(t)$ counts the active connected components.
+    *   At the beginning of the filtration ($t \approx 0.0$), $\beta_0 = 2$, proving the existence of **two independent, disjoint spiral components**.
+    *   As the filtration value rises past $t \approx 0.1$, the components merge, causing $\beta_0$ to drop to $1$ (representing the single remaining connected structure).
+
+
 ## API
 
 ### `fc.compute(x, min_persistence=0.0, h1=True)`
