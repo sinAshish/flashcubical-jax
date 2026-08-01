@@ -78,18 +78,26 @@ if HAS_TRITON:
         tl.store(has_zp_ptr + curr, has_zp, mask=mask)
 
 class TritonBackend(PHBackend):
-    def compute_ph(self, image: Any) -> np.ndarray:
+    def prepare(self, image: Any) -> Any:
         arr = torch.tensor(image, dtype=torch.float64)
+        if torch.cuda.is_available():
+            arr = arr.cuda()
+        return arr
+
+    def sync(self):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+    def compute_ph(self, arr: Any) -> np.ndarray:
         n, m = arr.shape
         v = n * m
         
         # Fallback to JAX or C++ CPU if Triton is not compiled or CUDA is missing
         if not HAS_TRITON or not torch.cuda.is_available():
             import flash_cubical as fc
-            return fc.compute(arr.numpy()).values
+            return fc.compute(arr.cpu().numpy()).values
             
         # GPU execution: Offload to GPU via Triton
-        arr = arr.cuda()
         births = arr.flatten()
         parent = torch.arange(v, dtype=torch.int32, device=arr.device)
         deaths = torch.full((v,), float('inf'), dtype=torch.float64, device=arr.device)

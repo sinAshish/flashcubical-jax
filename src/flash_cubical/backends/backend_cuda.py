@@ -25,16 +25,23 @@ class CudaBackend(PHBackend):
                 # Compile errors will be caught and logged safely
                 print(f"Warning: Failed to compile CUDA extension: {e}")
 
-    def compute_ph(self, image: Any) -> np.ndarray:
+    def prepare(self, image: Any) -> Any:
         arr = torch.tensor(image, dtype=torch.float64)
-        
+        if torch.cuda.is_available():
+            arr = arr.cuda()
+        return arr
+
+    def sync(self):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+    def compute_ph(self, arr: Any) -> np.ndarray:
         # Fallback to JAX or C++ CPU if CUDA compiling fails or no GPU is present
         if self.module is None or not torch.cuda.is_available():
             import flash_cubical as fc
-            return fc.compute(arr.numpy()).values
+            return fc.compute(arr.cpu().numpy()).values
             
         # GPU execution: Call the compiled CUDA C++ shared library
-        arr = arr.cuda()
         births = arr.flatten()
         
         # Call bindings compiled on-the-fly
