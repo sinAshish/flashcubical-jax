@@ -93,6 +93,12 @@ class JaxBackend(PHBackend):
         births = np.array(births_jax)
         has_zp = np.array(has_zp_jax)
         
+        # Truncate at inf
+        valid_count = np.searchsorted(saddle_vals, np.inf)
+        younger_s = younger_s[:valid_count]
+        older_s = older_s[:valid_count]
+        saddle_vals = saddle_vals[:valid_count]
+        
         # Phase 5: Sequential Union-Find strictly on the minimal saddle topology on CPU
         root_u_list = younger_s.tolist()
         root_v_list = older_s.tolist()
@@ -104,9 +110,6 @@ class JaxBackend(PHBackend):
         
         for i in range(len(root_u_list)):
             val = saddle_vals_list[i]
-            if val == float('inf'):
-                break # All valid saddles processed (since jnp.inf is sorted to the end)
-                
             ru = root_u_list[i]
             while uf_parent[ru] != ru:
                 uf_parent[ru] = uf_parent[uf_parent[ru]]

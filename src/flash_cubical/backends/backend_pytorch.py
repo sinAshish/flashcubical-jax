@@ -46,7 +46,10 @@ class PyTorchBackend(PHBackend):
         
         # Path doubling flattens the forest natively in tensors
         for _ in range(21):
-            parent = parent[parent]
+            new_parent = parent[parent]
+            if torch.equal(parent, new_parent):
+                break
+            parent = new_parent
             
         # Phase 3: Extract and map saddle edges
         mask = ~is_zp
