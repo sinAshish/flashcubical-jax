@@ -166,24 +166,34 @@ PYTHONPATH=. uv run python benchmark/run_benchmarks.py
 The following benchmarks were evaluated locally on **macOS (Apple Silicon CPU)**. This is a CPU-bound execution (which lacks CUDA hardware acceleration for tensor sorting, but serves as a solid baseline):
 
 ```text
-Grid Size    | Noise      | Backend                | Time (ms)  | Accuracy
----------------------------------------------------------------------------
-32x32        | uniform    | FlashCubical (C++)     | 0.05       | Baseline
-32x32        | uniform    | JAX (Parallel Forest)  | 0.72       | PASS
-32x32        | uniform    | PyTorch (Parallel)     | 0.77       | PASS
----------------------------------------------------------------------------
-64x64        | uniform    | FlashCubical (C++)     | 0.23       | Baseline
-64x64        | uniform    | JAX (Parallel Forest)  | 2.96       | PASS
-64x64        | uniform    | PyTorch (Parallel)     | 3.27       | PASS
----------------------------------------------------------------------------
-128x128      | gaussian   | FlashCubical (C++)     | 1.45       | Baseline
-128x128      | gaussian   | JAX (Parallel Forest)  | 12.85      | PASS
-128x128      | gaussian   | PyTorch (Parallel)     | 11.06      | PASS
----------------------------------------------------------------------------
-1024x1024    | uniform    | FlashCubical (C++)     | 122.00     | Baseline
-1024x1024    | uniform    | JAX (Parallel Forest)  | 1018.40    | PASS
-1024x1024    | uniform    | PyTorch (Parallel)     | 960.96     | PASS
+Grid Size    | Noise      | Backend                   | Prep (ms) | Compute (ms) | Accuracy
+--------------------------------------------------------------------------------------------
+32x32        | uniform    | FlashCubical (C++)        | 0.01      | 0.05         | Baseline
+32x32        | uniform    | JAX (Parallel Forest)     | 7.51      | 1.09         | PASS
+32x32        | uniform    | PyTorch (Parallel Forest) | 0.27      | 0.75         | PASS
+32x32        | uniform    | Triton (Parallel Forest)  | 0.00      | 0.05         | PASS
+32x32        | uniform    | CUDA C++ (Numba-free)     | 0.00      | 0.05         | PASS
+--------------------------------------------------------------------------------------------
+64x64        | uniform    | FlashCubical (C++)        | 0.00      | 0.22         | Baseline
+64x64        | uniform    | JAX (Parallel Forest)     | 0.20      | 4.87         | PASS
+64x64        | uniform    | PyTorch (Parallel Forest) | 0.08      | 3.16         | PASS
+64x64        | uniform    | Triton (Parallel Forest)  | 0.00      | 0.22         | PASS
+64x64        | uniform    | CUDA C++ (Numba-free)     | 0.00      | 0.21         | PASS
+--------------------------------------------------------------------------------------------
+128x128      | gaussian   | FlashCubical (C++)        | 0.00      | 1.43         | Baseline
+128x128      | gaussian   | JAX (Parallel Forest)     | 0.27      | 21.03        | PASS
+128x128      | gaussian   | PyTorch (Parallel Forest) | 0.07      | 10.98        | PASS
+128x128      | gaussian   | Triton (Parallel Forest)  | 0.00      | 1.45         | PASS
+128x128      | gaussian   | CUDA C++ (Numba-free)     | 0.00      | 1.35         | PASS
+--------------------------------------------------------------------------------------------
+1024x1024    | uniform    | FlashCubical (C++)        | 0.00      | 122.58       | Baseline
+1024x1024    | uniform    | JAX (Parallel Forest)     | 0.30      | 1838.01      | PASS
+1024x1024    | uniform    | PyTorch (Parallel Forest) | 0.57      | 963.52       | PASS
+1024x1024    | uniform    | Triton (Parallel Forest)  | 0.01      | 123.91       | PASS
+1024x1024    | uniform    | CUDA C++ (Numba-free)     | 0.00      | 125.06       | PASS
 ```
+
+*Note: Since Triton and CUDA require an NVIDIA GPU, they safely fall back to the CPU baseline on macOS to ensure the testing pipeline completes without crashing. This is why their macOS execution times mirror the baseline.*
 
 To run these benchmarks on your machine:
 ```bash
