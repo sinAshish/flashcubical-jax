@@ -50,14 +50,14 @@ ph = fc.compute(volume)               # computes H0, H1, H2
 ph = fc.compute(volume, h1=False)     # skip H1, only H0 and H2
 ```
 
-## Topological Visualization (3D Hollow Torus Example)
+## Topological Visualization (3D Torus Example)
 
 The following figure displays a complete 3-dimensional Topological Data Analysis (TDA) pipeline of a $64 \times 64 \times 64$ synthetic hollow torus volume evaluated using `FlashCubical`:
 
 ![3D Torus TDA Pipeline](doc/images/torus_3d_tda.png)
 
 ### Description of the Panels
-1.  **3D Hollow Torus Point Cloud**: Shows the 3D point cloud representation of the hollow torus shell of major radius $R=1.5$ and thin minor radius $r=0.25$, visualized under a 45° perspective. The coordinates are colored continuously around the ring using a **rainbow color palette** mapped to the toroidal sweep angle. The shell has a low filtration value ($\approx 0.0$), while the inside of the tube, the central hole, and the exterior space have higher values ($\ge 1.0$).
+1.  **3D Points Sampled from Torus**: Shows the 3D point cloud representation of the hollow torus shell of major radius $R=1.5$ and thin minor radius $r=0.25$, visualized under a 45° perspective. The coordinates are colored continuously around the ring using a **rainbow color palette** mapped to the toroidal sweep angle. The shell has a low filtration value ($\approx 0.0$), while the inside of the tube, the central hole, and the exterior space have higher values ($\ge 1.0$).
 2.  **3D Persistence Diagram (H0, H1, H2)**: Computes the births and deaths of topological structures across all three dimensions simultaneously:
     *   **$H_0$ (Connected Components)**: Born along the low-value torus shell valley. $1$ robust component (born at $\approx 0.0$, dying at $+\infty$) persists.
     *   **$H_1$ (Loops / Tunnels)**: Two distinct topological tunnels are born at $t \approx 0.0$: one loop wraps around the main ring, and another wraps inside the tube.
@@ -68,14 +68,14 @@ The following figure displays a complete 3-dimensional Topological Data Analysis
     *   $\beta_2(t)$ counts the active 2D enclosed voids.
     *   The curves beautifully capture the topological invariants of a hollow torus ($\beta_0 = 1, \beta_1 = 2, \beta_2 = 1$) simultaneously spanning between $t \approx 0.0$ and $t \approx 0.25$.
 
-## Topological Visualization (2D Yin-Yang Spiral Example)
+## Topological Visualization (2D Spiral Example)
 
-The following figure displays a complete 2-dimensional Topological Data Analysis (TDA) pipeline of a $128 \times 128$ synthetic Yin-Yang double-spiral scalar field evaluated using `FlashCubical`:
+The following figure displays a complete 2-dimensional Topological Data Analysis (TDA) pipeline of a $128 \times 128$ synthetic double-spiral scalar field evaluated using `FlashCubical`:
 
 ![2D Spiral TDA Pipeline](doc/images/spiral_2d_tda.png)
 
 ### Description of the Panels
-1.  **2D Yin-Yang Spiral Point Cloud**: A 2D point cloud representing the valleys (low filtration values $\approx 0.0$) of two intertwined spiral arms. The points are colored using a swirling **rainbow color palette** mapped to their polar sweep angle.
+1.  **Spiral Distribution**: A 2D point cloud representing the valleys (low filtration values $\approx 0.0$) of two intertwined spiral arms. The points are colored using a swirling **rainbow color palette** mapped to their polar sweep angle.
 2.  **2D Persistence Diagram (H0 & H1)**: Computes the births and deaths of structures as the filtration sweeps from low to high values:
     *   **$H_0$ (Connected Components)**: Two independent local minima are born at $t \approx 0.0$ corresponding to the two disjoint spiral valleys. As they grow wider, they eventually touch and merge into a single component.
     *   **$H_1$ (Loops / Holes)**: Because the spirals wind tightly around each other, minor loop structures can briefly appear and die as the corridors bleed together.
