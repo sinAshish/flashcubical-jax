@@ -211,7 +211,7 @@ The original C++ implementation in `FlashCubical` uses a highly optimized **sequ
 3. It performs a sequential Union-Find pointer-chasing loop (`parent[i] = parent[parent[i]]`) which is incredibly fast on CPUs due to hardware-level branch prediction.
 
 ### The JAX Method (Parallel Forest Algorithm)
-Because sequential Union-Find is highly unroll-heavy and slow in JAX's XLA compiler, our JAX implementation uses a completely novel **purely parallel tensor-native** algorithm:
+Because sequential Union-Find is highly unroll-heavy and slow in JAX's XLA compiler, our JAX implementation adapts established parallel graph algorithms (such as parallel pointer jumping and Shiloach-Vishkin inspired connected components) into a **purely parallel tensor-native** format:
 
 1. **Parallel Zero-Persistence Flow (Pruning)**: Instead of a sequential loop, we find the steepest descending neighbor for all $V$ vertices simultaneously in a single tensor operation using JAX's `segment_min`. This establishes a directed "gradient forest" mapping younger vertices directly to older ones.
 2. **Parallel Pointer Jumping (Path Doubling)**: We flatten this entire zero-persistence forest in parallel using path doubling (`parent = parent[parent]`). Because the path lengths halve at each step, exactly $21$ iterations are guaranteed to flatten a $1024\times1024$ grid, snapping all vertices to their local minimum root. No loops!
