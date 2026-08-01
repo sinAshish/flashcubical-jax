@@ -4,7 +4,9 @@ Fast V-filtration cubical persistent homology for 2D and 3D scalar grids induced
 
 This repository is a fork/extension of the original highly-optimized CPU implementation of [**FlashCubical** (by T-prog123)](https://github.com/T-prog123/FlashCubical). It introduces purely tensor-native and GPU-accelerated backends (in JAX, PyTorch, Triton, and CUDA) for massive parallelization.
 
-Computes H0 (connected components), H1 (loops / tunnels), and H2 (voids) using a lower-star filtration with a precomputed lookup table for local zero-persistence pairs.
+The original C++ implementation computes H0 (connected components), H1 (loops), and H2 (voids) using a lower-star filtration reliant on massive precomputed binary lookup tables (`.bin` files) to determine local zero-persistence pairs. 
+
+To provide a readable, pure-Python architecture, our new JAX and PyTorch tensor backends completely discard these `.bin` lookup files for H0. Instead of relying on offline-generated binary blobs, we calculate topological zero-persistence pairs on-the-fly using purely mathematical tensor operations (like parallel gradient descent and `segment_min`/`scatter_reduce`), resulting in an elegant and fully transparent implementation.
 
 
 
@@ -204,16 +206,16 @@ PYTHONPATH=. uv run python benchmark/run_benchmarks.py
 
 ## JAX Algorithmic Write-Up: Comparison with C++
 
-### The C++ Method (Sequential Lower-Star Sweep)
-The original C++ implementation in `FlashCubical` uses a highly optimized **sequential lower-star filtration**. 
+### The C++ Method (Offline Lookup Tables)
+The original C++ implementation in `FlashCubical` uses a highly optimized **sequential lower-star filtration** heavily reliant on pre-computation:
 1. It sorts the $V$ vertices and iterates through them one by one.
-2. For each active vertex, it utilizes a pre-computed **256-bit hardware byte-lookup table** to quickly identify and eliminate zero-persistence edges in a single CPU cycle.
+2. For each active vertex, it utilizes massive **offline-generated binary lookup tables (up to 8MB `.bin` files)** to quickly identify and eliminate zero-persistence edges. It essentially looks up the pre-solved topology for any given local pixel neighborhood rather than calculating it mathematically.
 3. It performs a sequential Union-Find pointer-chasing loop (`parent[i] = parent[parent[i]]`) which is incredibly fast on CPUs due to hardware-level branch prediction.
 
-### The JAX Method (Parallel Forest Algorithm)
-Because sequential Union-Find is highly unroll-heavy and slow in JAX's XLA compiler, our JAX implementation adapts established parallel graph algorithms (such as parallel pointer jumping and Shiloach-Vishkin inspired connected components) into a **purely parallel tensor-native** format:
+### The JAX/PyTorch Method (Pure On-The-Fly Tensor Math)
+Because shipping large binary blobs defeats the purpose of a readable, pure-Python tensor implementation (and because GPU memory lookups for 8MB tables are slow compared to raw ALU compute), we entirely abandoned the `.bin` lookup tables. Our JAX/PyTorch implementation adapts established parallel graph algorithms into a **purely on-the-fly tensor-native** format:
 
-1. **Parallel Zero-Persistence Flow (Pruning)**: Instead of a sequential loop, we find the steepest descending neighbor for all $V$ vertices simultaneously in a single tensor operation using JAX's `segment_min`. This establishes a directed "gradient forest" mapping younger vertices directly to older ones.
+1. **Parallel Zero-Persistence Flow (Mathematical Pruning)**: Instead of looking up pre-solved answers in a `.bin` file, we mathematically calculate the steepest descending neighbor for all $V$ vertices simultaneously in a single tensor operation using `segment_min` or `scatter_reduce`. This establishes a directed "gradient forest" mapping younger vertices directly to older ones purely on-the-fly.
 2. **Parallel Pointer Jumping (Path Doubling)**: We flatten this entire zero-persistence forest in parallel using path doubling (`parent = parent[parent]`). Because the path lengths halve at each step, exactly $21$ iterations are guaranteed to flatten a $1024\times1024$ grid, snapping all vertices to their local minimum root. No loops!
 3. **Saddle Edge Extraction**: Edges that are not part of the zero-persistence forest are "saddles" that merge components. We filter out the internal ones and map the saddles directly to the flattened roots.
 4. **Stable Sort**: We lexicographically sort the remaining saddles in parallel.
