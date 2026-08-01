@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - jax-version
+  pull_request:
+    branches:
+      - main
+      - jax-version
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Package and Test Dependencies
+        run: |
+          uv pip install -e .[test,gpu]
+
+      - name: Run Topological Accuracy Tests
+        run: |
+          uv run pytest tests/test_benchmarks.py -v
+
+      - name: Verify PEP 517 Build Compilation
+        run: |
+          uv pip install build
+          uv run python -m build
