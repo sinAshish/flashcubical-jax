@@ -15,10 +15,23 @@ def run_suite():
         TritonBackend(), 
         CudaBackend()
     ]
+    
+    # Global warmup to initialize GPU runtimes (JAX/PyTorch) and avoid penalizing the first benchmark
+    print("Initializing GPU runtimes and performing global warmup...")
+    warmup_grid = generate_2d_grid(16, "uniform")
+    for backend in backends:
+        try:
+            prep_w = backend.prepare(warmup_grid) if hasattr(backend, "prepare") else warmup_grid
+            backend.compute_ph(prep_w)
+            if hasattr(backend, "sync"):
+                backend.sync()
+        except Exception:
+            pass
+            
     sizes = [32, 64, 128, 256, 512, 1024]
     noise_types = ["uniform", "gaussian"]
     
-    print(f"{'Grid Size':<12} | {'Noise':<10} | {'Backend':<22} | {'Prep (ms)':<9} | {'Compute (ms)':<12} | {'Accuracy'}")
+    print(f"\n{'Grid Size':<12} | {'Noise':<10} | {'Backend':<22} | {'Prep (ms)':<9} | {'Compute (ms)':<12} | {'Accuracy'}")
     print("-" * 85)
     
     for size in sizes:

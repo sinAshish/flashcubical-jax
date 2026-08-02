@@ -122,42 +122,44 @@ The following benchmarks were evaluated locally on an **NVIDIA A100-PCIE-40GB GP
 ```text
 Grid Size    | Noise      | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 --------------------------------------------------------------------------------------------
-32x32        | uniform    | FlashCubical (C++)        | 0.01      | 0.07         | Baseline
-32x32        | uniform    | CUDA C++                  | 0.01      | 0.07         | PASS
-32x32        | uniform    | Triton (Parallel Forest)  | 0.01      | 0.08         | PASS
-32x32        | uniform    | PyTorch (Parallel Forest) | 3.08      | 2.03         | PASS
-32x32        | uniform    | JAX (Parallel Forest)     | 693.19    | 4.65         | PASS
+32x32        | uniform    | FlashCubical (C++)        | 0.00      | 0.05         | Baseline
+32x32        | uniform    | CUDA C++ (Numba-free)     | 0.01      | 0.05         | PASS
+32x32        | uniform    | Triton (Parallel Forest)  | 0.01      | 0.05         | PASS
+32x32        | uniform    | PyTorch (Parallel Forest) | 0.07      | 0.72         | PASS
+32x32        | uniform    | JAX (Parallel Forest)     | 0.29      | 1.00         | PASS
 --------------------------------------------------------------------------------------------
-64x64        | uniform    | FlashCubical (C++)        | 0.00      | 0.44         | Baseline
-64x64        | uniform    | CUDA C++                  | 0.00      | 0.48         | PASS
-64x64        | uniform    | Triton (Parallel Forest)  | 0.01      | 0.55         | PASS
-64x64        | uniform    | PyTorch (Parallel Forest) | 0.18      | 7.89         | PASS
-64x64        | uniform    | JAX (Parallel Forest)     | 0.24      | 9.27         | PASS
+64x64        | uniform    | FlashCubical (C++)        | 0.00      | 0.21         | Baseline
+64x64        | uniform    | CUDA C++ (Numba-free)     | 0.03      | 0.27         | PASS
+64x64        | uniform    | Triton (Parallel Forest)  | 0.03      | 0.23         | PASS
+64x64        | uniform    | PyTorch (Parallel Forest) | 0.07      | 2.90         | PASS
+64x64        | uniform    | JAX (Parallel Forest)     | 0.16      | 4.37         | PASS
 --------------------------------------------------------------------------------------------
-128x128      | uniform    | FlashCubical (C++)        | 0.00      | 2.01         | Baseline
-128x128      | uniform    | CUDA C++                  | 0.00      | 2.07         | PASS
-128x128      | uniform    | Triton (Parallel Forest)  | 0.03      | 2.07         | PASS
-128x128      | uniform    | JAX (Parallel Forest)     | 0.25      | 15.50        | PASS
-128x128      | uniform    | PyTorch (Parallel Forest) | 0.17      | 40.49        | PASS
+128x128      | uniform    | FlashCubical (C++)        | 0.00      | 1.61         | Baseline
+128x128      | uniform    | CUDA C++ (Numba-free)     | 0.02      | 1.44         | PASS
+128x128      | uniform    | Triton (Parallel Forest)  | 0.02      | 1.49         | PASS
+128x128      | uniform    | PyTorch (Parallel Forest) | 0.08      | 10.33        | PASS
+128x128      | uniform    | JAX (Parallel Forest)     | 0.26      | 19.26        | PASS
 --------------------------------------------------------------------------------------------
-256x256      | uniform    | FlashCubical (C++)        | 0.00      | 8.23         | Baseline
-256x256      | uniform    | Triton (Parallel Forest)  | 0.01      | 11.07        | PASS
-256x256      | uniform    | CUDA C++                  | 0.00      | 12.63        | PASS
-256x256      | uniform    | JAX (Parallel Forest)     | 0.40      | 63.13        | PASS
-256x256      | uniform    | PyTorch (Parallel Forest) | 0.90      | 88.79        | PASS
+256x256      | uniform    | FlashCubical (C++)        | 0.00      | 6.92         | Baseline
+256x256      | uniform    | Triton (Parallel Forest)  | 0.14      | 7.11         | PASS
+256x256      | uniform    | CUDA C++ (Numba-free)     | 0.11      | 6.98         | PASS
+256x256      | uniform    | PyTorch (Parallel Forest) | 0.15      | 42.76        | PASS
+256x256      | uniform    | JAX (Parallel Forest)     | 0.27      | 83.80        | PASS
 --------------------------------------------------------------------------------------------
-512x512      | uniform    | FlashCubical (C++)        | 0.01      | 34.41        | Baseline
-512x512      | uniform    | Triton (Parallel Forest)  | 0.01      | 38.72        | PASS
-512x512      | uniform    | CUDA C++                  | 0.00      | 39.11        | PASS
-512x512      | uniform    | JAX (Parallel Forest)     | 0.89      | 281.30       | PASS
-512x512      | uniform    | PyTorch (Parallel Forest) | 15.66     | 320.37       | PASS
+512x512      | uniform    | FlashCubical (C++)        | 0.01      | 29.21        | Baseline
+512x512      | uniform    | Triton (Parallel Forest)  | 0.16      | 29.24        | PASS
+512x512      | uniform    | CUDA C++ (Numba-free)     | 0.16      | 29.18        | PASS
+512x512      | uniform    | PyTorch (Parallel Forest) | 0.31      | 198.28       | PASS
+512x512      | uniform    | JAX (Parallel Forest)     | 0.30      | 375.86       | PASS
 --------------------------------------------------------------------------------------------
-1024x1024    | uniform    | FlashCubical (C++)        | 0.02      | 155.60       | Baseline
-1024x1024    | uniform    | Triton (Parallel Forest)  | 0.09      | 174.36       | PASS
-1024x1024    | uniform    | CUDA C++                  | 0.14      | 177.65       | PASS
-1024x1024    | uniform    | JAX (Parallel Forest)     | 9.37      | 1330.98      | PASS
-1024x1024    | uniform    | PyTorch (Parallel Forest) | 7.54      | 1426.12      | PASS
+1024x1024    | uniform    | FlashCubical (C++)        | 0.01      | 130.38       | Baseline
+1024x1024    | uniform    | Triton (Parallel Forest)  | 0.50      | 124.74       | PASS
+1024x1024    | uniform    | CUDA C++ (Numba-free)     | 0.44      | 124.83       | PASS
+1024x1024    | uniform    | PyTorch (Parallel Forest) | 0.81      | 1051.42      | PASS
+1024x1024    | uniform    | JAX (Parallel Forest)     | 0.37      | 1828.06      | PASS
 ```
+
+*Note: The JAX (`jax.jit`) and PyTorch compilation times are deliberately excluded via warmup rounds before timings begin. The metrics above represent pure execution latency (which is the standard benchmarking methodology since compilation is a one-time cost in real-world pipelines).*
 
 To run these benchmarks on your machine:
 ```bash
