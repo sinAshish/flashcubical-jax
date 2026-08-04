@@ -127,6 +127,8 @@ A pluggable benchmarking suite is provided under the `benchmark/` folder to comp
 
 The following benchmarks were evaluated locally on an **NVIDIA A100-PCIE-40GB GPU** computing the connected components (H0) of noisy grids.
 
+The following tables highlight the performance on massive grids ($512^2+$) where GPU parallelism overtakes CPU sequential clock speeds. **[Full benchmark logs including low-resolution execution times can be found in `benchmark/results/`](benchmark/results/)**.
+
 #### Uniform Noise
 ```text
 Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
@@ -172,7 +174,7 @@ PYTHONPATH=. uv run python benchmark/run_benchmarks.py
 
 ### 3D Volume Benchmarking Results (A100 GPU)
 
-The pure Python JAX and PyTorch tensor backends also support native 3D H0 computation without relying on offline binary lookup tables.
+The pure Python JAX and PyTorch tensor backends also support native 3D H0 computation without relying on offline binary lookup tables. **[Full 3D benchmark logs can be found in `benchmark/results/`](benchmark/results/)**.
 
 #### Uniform Noise
 ```text

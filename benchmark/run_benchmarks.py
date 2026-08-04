@@ -1,4 +1,7 @@
 import time
+import warnings
+warnings.filterwarnings('ignore', message='.*CUDA initialization.*')
+
 import numpy as np
 from flash_cubical.backends.benchmark_utils import generate_2d_grid, verify_persistence
 from flash_cubical.backends.backend_baseline import FlashCubicalBackend
@@ -61,7 +64,7 @@ def run_suite():
                         
                     # Timed run for compute only
                     times = []
-                    for _ in range(5 if size >= 512 else 10):
+                    for _ in range(5):
                         if hasattr(backend, "sync"):
                             backend.sync()
                         start = time.perf_counter()
