@@ -36,7 +36,15 @@ import flash_cubical as fc
 import numpy as np
 
 image = np.random.rand(256, 256)      # 2D scalar field
+
+# 1. Using the default highly-optimized C++ CPU backend
 ph = fc.compute(image)
+
+# 2. Using our pure tensor-native GPU backends (2D H0 only)
+ph_torch  = fc.compute(image, backend="pytorch")
+ph_jax    = fc.compute(image, backend="jax")
+ph_triton = fc.compute(image, backend="triton")
+ph_cuda   = fc.compute(image, backend="cuda")
 
 ph.values                             # float64 array, shape (n, 3)
                                       # columns: birth, death, dimension
@@ -44,13 +52,24 @@ ph.values                             # float64 array, shape (n, 3)
 ph.plot()                             # persistence diagram
 ```
 
-For a 3D volume:
+For a 3D volume (CPU backend only):
 
 ```python
 volume = np.random.rand(64, 64, 64)
 ph = fc.compute(volume)               # computes H0, H1, H2
 ph = fc.compute(volume, h1=False)     # skip H1, only H0 and H2
 ```
+
+## API
+
+### `fc.compute(x, min_persistence=0.0, h1=True, backend="cpu")`
+
+|Parameter|Description|
+|-|-|
+|`x`|2D or 3D array-like, converted to float64|
+|`min_persistence`|Minimal distance between birth and death values. Must be non-negative.|
+|`h1`|Compute H1. Must be `True` for 2D inputs when using the CPU backend. Can be `False` for 3D to skip H1|
+|`backend`|Computational backend to use. Options: `"cpu"`, `"pytorch"`, `"jax"`, `"triton"`, `"cuda"`. Non-CPU backends currently only support 2D inputs and compute H0 components.|
 
 ## Topological Visualization (3D Torus Example)
 
@@ -85,17 +104,6 @@ The following figure displays a complete 2-dimensional Topological Data Analysis
     *   $\beta_0(t)$ counts the active connected components.
     *   At the beginning of the filtration ($t \approx 0.0$), $\beta_0 = 2$, proving the existence of **two independent, disjoint spiral components**.
     *   As the filtration value rises past $t \approx 0.1$, the components merge, causing $\beta_0$ to drop to $1$ (representing the single remaining connected structure).
-
-
-## API
-
-### `fc.compute(x, min_persistence=0.0, h1=True)`
-
-|Parameter|Description|
-|-|-|
-|`x`|2D or 3D array-like, converted to float64|
-|`min_persistence`|Minimal distance between birth and death values. Must be non-negative.|
-|`h1`|Compute H1. Must be `True` for 2D inputs. Can be `False` for 3D to skip H1|
 
 Returns a `Persistence` object.
 

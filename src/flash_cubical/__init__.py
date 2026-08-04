@@ -23,7 +23,7 @@ def _load_packaged_lookup_tables() -> None:
 _load_packaged_lookup_tables()
 
 
-def compute(x, *, min_persistence: float = 0.0, h1: bool = True) -> Persistence:
+def compute(x, *, min_persistence: float = 0.0, h1: bool = True, backend: str = "cpu") -> Persistence:
     """Compute cubical persistent homology of a 2D or 3D scalar array.
 
     Parameters
@@ -38,8 +38,14 @@ def compute(x, *, min_persistence: float = 0.0, h1: bool = True) -> Persistence:
     h1 : bool, optional
         Whether to compute H1 (loops / tunnels).
         - For 3D inputs: defaults to True; pass False to skip H1.
-        - For 2D inputs: must be True (raising ValueError otherwise), because
-          the 2D pipeline always computes H0 and H1 together.
+        - For 2D inputs: must be True (raising ValueError otherwise) when using the 'cpu' backend.
+    backend : str, optional
+        The computational backend to use. Options are:
+        - "cpu" (default): The highly-optimized C++ native implementation. Supports 2D and 3D.
+        - "pytorch": PyTorch GPU-accelerated Parallel Forest (2D H0 only).
+        - "jax": JAX GPU-accelerated Parallel Forest (2D H0 only).
+        - "triton": Triton GPU-accelerated Parallel Forest (2D H0 only).
+        - "cuda": CUDA C++ GPU-accelerated Parallel Forest (2D H0 only).
 
     Returns
     -------
@@ -51,7 +57,7 @@ def compute(x, *, min_persistence: float = 0.0, h1: bool = True) -> Persistence:
     ------
     ValueError
         If ``x`` is not 2D or 3D, if ``min_persistence < 0``, or if
-        ``h1=False`` is requested for a 2D input.
+        invalid parameter combinations are requested for the chosen backend.
     RuntimeWarning
         If ``min_persistence != 0.0`` (backend does not yet support this).
     """
@@ -75,11 +81,47 @@ def compute(x, *, min_persistence: float = 0.0, h1: bool = True) -> Persistence:
             stacklevel=2,
         )
 
-    if x.ndim == 2 and not h1:
-        raise ValueError(
-            "h1=False is only valid for 3D inputs.  The 2D backend always "
-            "computes H0 and H1 together."
-        )
+    backend = backend.lower()
 
-    arr = _compute_native(x, h1)
-    return Persistence(arr)
+    if backend == "cpu":
+        if x.ndim == 2 and not h1:
+            raise ValueError(
+                "h1=False is only valid for 3D inputs.  The 2D CPU backend always "
+                "computes H0 and H1 together."
+            )
+        arr = _compute_native(x, h1)
+        return Persistence(arr)
+
+    # For GPU backends
+    if x.ndim != 2:
+        raise ValueError(f"The '{backend}' backend currently only supports 2D inputs for H0 computation.")
+
+    # Lazy import backends to avoid making deep learning frameworks hard dependencies
+    b_inst = None
+    if backend == "pytorch":
+        from .backends.backend_pytorch import PyTorchBackend
+        b_inst = PyTorchBackend()
+    elif backend == "jax":
+        from .backends.backend_jax import JaxBackend
+        b_inst = JaxBackend()
+    elif backend == "triton":
+        from .backends.backend_triton import TritonBackend
+        b_inst = TritonBackend()
+    elif backend == "cuda":
+        from .backends.backend_cuda import CudaBackend
+        b_inst = CudaBackend()
+    else:
+        raise ValueError(f"Unknown backend '{backend}'. Choose from: 'cpu', 'pytorch', 'jax', 'triton', 'cuda'.")
+
+    prepared = b_inst.prepare(x) if hasattr(b_inst, "prepare") else x
+    res = b_inst.compute_ph(prepared)
+    
+    # Convert result back to CPU numpy array if needed
+    if hasattr(res, "cpu"):
+        res = res.cpu().numpy()
+    elif hasattr(res, "device_buffer"):
+        res = np.array(res)
+    elif not isinstance(res, np.ndarray):
+        res = np.array(res)
+
+    return Persistence(res)
