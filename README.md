@@ -69,7 +69,7 @@ ph = fc.compute(volume, h1=False)     # skip H1, only H0 and H2
 |`x`|2D or 3D array-like, converted to float64|
 |`min_persistence`|Minimal distance between birth and death values. Must be non-negative.|
 |`h1`|Compute H1. Must be `True` for 2D inputs when using the CPU backend. Can be `False` for 3D to skip H1|
-|`backend`|Computational backend to use. Options: `"cpu"`, `"pytorch"`, `"jax"`, `"triton"`, `"cuda"`. Non-CPU backends currently only support 2D inputs and compute H0 components.|
+|`backend`|Computational backend to use. Options: `"cpu"`, `"pytorch"`, `"jax"`, `"triton"`, `"cuda"`. Non-CPU backends compute H0 components. JAX and PyTorch natively support 2D and 3D volumes. Triton and CUDA currently only support 2D.|
 
 ## Topological Visualization (3D Torus Example)
 

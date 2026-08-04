@@ -92,9 +92,8 @@ def compute(x, *, min_persistence: float = 0.0, h1: bool = True, backend: str = 
         arr = _compute_native(x, h1)
         return Persistence(arr)
 
-    # For GPU backends
-    if x.ndim != 2:
-        raise ValueError(f"The '{backend}' backend currently only supports 2D inputs for H0 computation.")
+    if x.ndim != 2 and backend in ["triton", "cuda"]:
+        raise ValueError(f"The '{backend}' backend currently only supports 2D inputs for H0 computation. 3D coming soon.")
 
     # Lazy import backends to avoid making deep learning frameworks hard dependencies
     b_inst = None

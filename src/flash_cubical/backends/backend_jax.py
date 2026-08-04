@@ -6,13 +6,25 @@ from typing import Any
 from .backend_protocol import PHBackend
 
 def phase_1_4(image):
-    n, m = image.shape
-    v = n * m
+    v = image.size
     births = image.flatten()
     
-    r, c = jnp.meshgrid(jnp.arange(n), jnp.arange(m), indexing='ij')
-    u = jnp.concatenate([(r[:, :-1] * m + c[:, :-1]).flatten(), (r[:-1, :] * m + c[:-1, :]).flatten()])
-    v_ = jnp.concatenate([(r[:, :-1] * m + c[:, 1:]).flatten(), (r[1:, :] * m + c[1:, :]).flatten()])
+    if image.ndim == 2:
+        n, m = image.shape
+        r, c = jnp.meshgrid(jnp.arange(n), jnp.arange(m), indexing='ij')
+        u = jnp.concatenate([(r[:, :-1] * m + c[:, :-1]).flatten(), (r[:-1, :] * m + c[:-1, :]).flatten()])
+        v_ = jnp.concatenate([(r[:, :-1] * m + c[:, 1:]).flatten(), (r[1:, :] * m + c[1:, :]).flatten()])
+    else:
+        d, n, m = image.shape
+        z, r, c = jnp.meshgrid(jnp.arange(d), jnp.arange(n), jnp.arange(m), indexing='ij')
+        u_z = (z[:-1, :, :] * n * m + r[:-1, :, :] * m + c[:-1, :, :]).flatten()
+        v_z = ((z[:-1, :, :] + 1) * n * m + r[:-1, :, :] * m + c[:-1, :, :]).flatten()
+        u_y = (z[:, :-1, :] * n * m + r[:, :-1, :] * m + c[:, :-1, :]).flatten()
+        v_y = (z[:, :-1, :] * n * m + (r[:, :-1, :] + 1) * m + c[:, :-1, :]).flatten()
+        u_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + c[:, :, :-1]).flatten()
+        v_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + (c[:, :, :-1] + 1)).flatten()
+        u = jnp.concatenate([u_z, u_y, u_x])
+        v_ = jnp.concatenate([v_z, v_y, v_x])
     
     edge_vals = jnp.maximum(births[u], births[v_])
     
@@ -76,9 +88,7 @@ class JaxBackend(PHBackend):
         pass
 
     def compute_ph(self, arr: Any) -> Any:
-        # Since `arr` comes from `prepare()`, its shape is accessed safely on host
-        n, m = arr.shape
-        v = n * m
+        v = arr.size
         
         # Run JIT-compiled Phases 1-4 on GPU
         out = _jit_phases_1_4(arr)

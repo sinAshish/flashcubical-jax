@@ -15,14 +15,26 @@ class PyTorchBackend(PHBackend):
             torch.cuda.synchronize()
 
     def compute_ph(self, arr: Any) -> np.ndarray:
-        n, m = arr.shape
-        v = n * m
+        v = arr.numel()
         births = arr.flatten()
         
         # Novel PyTorch algorithm: Parallel Zero-Persistence Gradient Flow + Sequential Saddle Merge
-        r, c = torch.meshgrid(torch.arange(n, device=arr.device), torch.arange(m, device=arr.device), indexing='ij')
-        u = torch.cat([(r[:, :-1] * m + c[:, :-1]).flatten(), (r[:-1, :] * m + c[:-1, :]).flatten()])
-        v_ = torch.cat([(r[:, :-1] * m + c[:, 1:]).flatten(), (r[1:, :] * m + c[1:, :]).flatten()])
+        if arr.ndim == 2:
+            n, m = arr.shape
+            r, c = torch.meshgrid(torch.arange(n, device=arr.device), torch.arange(m, device=arr.device), indexing='ij')
+            u = torch.cat([(r[:, :-1] * m + c[:, :-1]).flatten(), (r[:-1, :] * m + c[:-1, :]).flatten()])
+            v_ = torch.cat([(r[:, :-1] * m + c[:, 1:]).flatten(), (r[1:, :] * m + c[1:, :]).flatten()])
+        else:
+            d, n, m = arr.shape
+            z, r, c = torch.meshgrid(torch.arange(d, device=arr.device), torch.arange(n, device=arr.device), torch.arange(m, device=arr.device), indexing='ij')
+            u_z = (z[:-1, :, :] * n * m + r[:-1, :, :] * m + c[:-1, :, :]).flatten()
+            v_z = ((z[:-1, :, :] + 1) * n * m + r[:-1, :, :] * m + c[:-1, :, :]).flatten()
+            u_y = (z[:, :-1, :] * n * m + r[:, :-1, :] * m + c[:, :-1, :]).flatten()
+            v_y = (z[:, :-1, :] * n * m + (r[:, :-1, :] + 1) * m + c[:, :-1, :]).flatten()
+            u_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + c[:, :, :-1]).flatten()
+            v_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + (c[:, :, :-1] + 1)).flatten()
+            u = torch.cat([u_z, u_y, u_x])
+            v_ = torch.cat([v_z, v_y, v_x])
         
         edge_vals = torch.maximum(births[u], births[v_])
         
