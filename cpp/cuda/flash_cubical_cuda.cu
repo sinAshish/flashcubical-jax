@@ -108,6 +108,75 @@ torch::Tensor compute_h0_cuda(torch::Tensor births, int n, int m) {
     return deaths;
 }
 
+
+__global__ void prepass_3d_cuda_kernel(
+    const double* births,
+    int* parent,
+    double* deaths,
+    bool* has_zp,
+    int d, int n, int m, int v
+) {
+    int curr = blockIdx.x * blockDim.x + threadIdx.x;
+    if (curr >= v) return;
+    
+    double curr_birth = births[curr];
+    int z = curr / (n * m);
+    int r = (curr / m) % n;
+    int c = curr % m;
+    
+    int best_older = curr;
+    double min_older_birth = curr_birth;
+    bool found_older = false;
+    
+    auto check_neighbor = [&](int nbr) {
+        double birth_nbr = births[nbr];
+        if (birth_nbr < curr_birth || (birth_nbr == curr_birth && nbr < curr)) {
+            if (!found_older || birth_nbr < min_older_birth || (birth_nbr == min_older_birth && nbr < best_older)) {
+                best_older = nbr;
+                min_older_birth = birth_nbr;
+                found_older = true;
+            }
+        }
+    };
+    
+    if (z > 0) check_neighbor(curr - n * m);
+    if (z < d - 1) check_neighbor(curr + n * m);
+    if (r > 0) check_neighbor(curr - m);
+    if (r < n - 1) check_neighbor(curr + m);
+    if (c > 0) check_neighbor(curr - 1);
+    if (c < m - 1) check_neighbor(curr + 1);
+    
+    parent[curr] = found_older ? best_older : curr;
+    deaths[curr] = found_older ? curr_birth : ::atof("inf");
+    has_zp[curr] = found_older;
+}
+
+torch::Tensor compute_h0_cuda_3d(torch::Tensor births, int d, int n, int m) {
+    const int v = d * n * m;
+    
+    auto options_int = torch::TensorOptions().dtype(torch::kInt32).device(births.device());
+    auto options_double = torch::TensorOptions().dtype(torch::kFloat64).device(births.device());
+    auto options_bool = torch::TensorOptions().dtype(torch::kBool).device(births.device());
+    
+    auto parent = torch::arange(v, options_int);
+    auto deaths = torch::full({v}, ::atof("inf"), options_double);
+    auto has_zp = torch::zeros({v}, options_bool);
+    
+    int threads = 512;
+    int blocks = (v + threads - 1) / threads;
+    
+    prepass_3d_cuda_kernel<<<blocks, threads>>>(
+        births.data_ptr<double>(),
+        parent.data_ptr<int>(),
+        deaths.data_ptr<double>(),
+        has_zp.data_ptr<bool>(),
+        d, n, m, v
+    );
+    
+    return deaths;
+}
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def("compute_h0_cuda_3d", &compute_h0_cuda_3d, "Compute H0 persistent homology on GPU using CUDA 3D");
     m.def("compute_h0_cuda", &compute_h0_cuda, "Compute H0 persistent homology on GPU using CUDA");
 }

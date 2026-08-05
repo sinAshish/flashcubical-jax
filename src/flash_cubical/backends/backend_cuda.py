@@ -43,10 +43,13 @@ class CudaBackend(PHBackend):
             
         # GPU execution: Call the compiled CUDA C++ shared library
         births = arr.flatten()
+        v = births.numel()
         
-        # Call bindings compiled on-the-fly
-        deaths = self.module.compute_h0_cuda(births, arr.shape[0], arr.shape[1])
-        
+        if arr.ndim == 2:
+            deaths = self.module.compute_h0_cuda(births, arr.shape[0], arr.shape[1])
+        else:
+            deaths = self.module.compute_h0_cuda_3d(births, arr.shape[0], arr.shape[1], arr.shape[2])
+            
         pairs = torch.stack([births, deaths, torch.zeros_like(births)], dim=1)
         return pairs.cpu().numpy()
 

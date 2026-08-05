@@ -88,10 +88,107 @@ class TritonBackend(PHBackend):
         if torch.cuda.is_available():
             torch.cuda.synchronize()
 
-    def compute_ph(self, arr: Any) -> np.ndarray:
-        n, m = arr.shape
-        v = n * m
+
+    @triton.jit
+    def triton_prepass_3d_kernel(
+        births_ptr, parent_ptr, deaths_ptr, has_zp_ptr, d, n, m, 
+        BLOCK_SIZE: tl.constexpr
+    ):
+        pid = tl.program_id(0)
+        offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+        v = d * n * m
+        mask = offsets < v
         
+        curr = offsets
+        curr_birth = tl.load(births_ptr + curr, mask=mask)
+        
+        z = curr // (n * m)
+        r = (curr // m) % n
+        c = curr % m
+        
+        best_older = curr
+        min_older_birth = curr_birth
+        found_older = tl.zeros([BLOCK_SIZE], dtype=tl.int1)
+        
+        # Z Up (z > 0)
+        valid = (z > 0) & mask
+        nbr = curr - (n * m)
+        birth = tl.load(births_ptr + nbr, mask=valid, other=float('inf'))
+        is_older = (birth < curr_birth) | ((birth == curr_birth) & (nbr < curr))
+        is_better = (birth < min_older_birth) | ((birth == min_older_birth) & (nbr < best_older))
+        update = is_older & (~found_older | is_better) & valid
+        best_older = tl.where(update, nbr, best_older)
+        min_older_birth = tl.where(update, birth, min_older_birth)
+        found_older = found_older | (is_older & valid)
+        
+        # Z Down (z < d - 1)
+        valid = (z < d - 1) & mask
+        nbr = curr + (n * m)
+        birth = tl.load(births_ptr + nbr, mask=valid, other=float('inf'))
+        is_older = (birth < curr_birth) | ((birth == curr_birth) & (nbr < curr))
+        is_better = (birth < min_older_birth) | ((birth == min_older_birth) & (nbr < best_older))
+        update = is_older & (~found_older | is_better) & valid
+        best_older = tl.where(update, nbr, best_older)
+        min_older_birth = tl.where(update, birth, min_older_birth)
+        found_older = found_older | (is_older & valid)
+
+        # Y Up (r > 0)
+        valid = (r > 0) & mask
+        nbr = curr - m
+        birth = tl.load(births_ptr + nbr, mask=valid, other=float('inf'))
+        is_older = (birth < curr_birth) | ((birth == curr_birth) & (nbr < curr))
+        is_better = (birth < min_older_birth) | ((birth == min_older_birth) & (nbr < best_older))
+        update = is_older & (~found_older | is_better) & valid
+        best_older = tl.where(update, nbr, best_older)
+        min_older_birth = tl.where(update, birth, min_older_birth)
+        found_older = found_older | (is_older & valid)
+        
+        # Y Down (r < n - 1)
+        valid = (r < n - 1) & mask
+        nbr = curr + m
+        birth = tl.load(births_ptr + nbr, mask=valid, other=float('inf'))
+        is_older = (birth < curr_birth) | ((birth == curr_birth) & (nbr < curr))
+        is_better = (birth < min_older_birth) | ((birth == min_older_birth) & (nbr < best_older))
+        update = is_older & (~found_older | is_better) & valid
+        best_older = tl.where(update, nbr, best_older)
+        min_older_birth = tl.where(update, birth, min_older_birth)
+        found_older = found_older | (is_older & valid)
+        
+        # X Left (c > 0)
+        valid = (c > 0) & mask
+        nbr = curr - 1
+        birth = tl.load(births_ptr + nbr, mask=valid, other=float('inf'))
+        is_older = (birth < curr_birth) | ((birth == curr_birth) & (nbr < curr))
+        is_better = (birth < min_older_birth) | ((birth == min_older_birth) & (nbr < best_older))
+        update = is_older & (~found_older | is_better) & valid
+        best_older = tl.where(update, nbr, best_older)
+        min_older_birth = tl.where(update, birth, min_older_birth)
+        found_older = found_older | (is_older & valid)
+        
+        # X Right (c < m - 1)
+        valid = (c < m - 1) & mask
+        nbr = curr + 1
+        birth = tl.load(births_ptr + nbr, mask=valid, other=float('inf'))
+        is_older = (birth < curr_birth) | ((birth == curr_birth) & (nbr < curr))
+        is_better = (birth < min_older_birth) | ((birth == min_older_birth) & (nbr < best_older))
+        update = is_older & (~found_older | is_better) & valid
+        best_older = tl.where(update, nbr, best_older)
+        min_older_birth = tl.where(update, birth, min_older_birth)
+        found_older = found_older | (is_older & valid)
+        
+        # Store results
+        tl.store(parent_ptr + curr, tl.where(found_older, best_older, curr), mask=mask)
+        tl.store(deaths_ptr + curr, tl.where(found_older, curr_birth, float('inf')), mask=mask)
+        tl.store(has_zp_ptr + curr, found_older, mask=mask)
+
+    def compute_ph(self, arr: Any) -> np.ndarray:
+        if arr.ndim == 2:
+            n, m = arr.shape
+            v = n * m
+        else:
+            d, n, m = arr.shape
+            v = d * n * m
+            
         # Fallback to JAX or C++ CPU if Triton is not compiled or CUDA is missing
         if not HAS_TRITON or not torch.cuda.is_available():
             import flash_cubical as fc
@@ -103,22 +200,18 @@ class TritonBackend(PHBackend):
         deaths = torch.full((v,), float('inf'), dtype=torch.float64, device=arr.device)
         has_zp = torch.zeros(v, dtype=torch.bool, device=arr.device)
         
-        # Load precomputed zero-persistence lookup table (256 entries for 2D)
-        # The LUT maps the 4-bit neighbor mask to the index of the best older neighbor
-        # (0: Up, 1: Down, 2: Left, 3: Right, 255: No zero-persistence pair)
-        # We can construct a mock or load the binary data directly.
-        lut = torch.full((256,), fill_value=255, dtype=torch.uint8, device=arr.device)
-        # Set some common configurations
-        lut[1] = 0 # Up is best
-        lut[2] = 1 # Down is best
-        lut[4] = 2 # Left is best
-        lut[8] = 3 # Right is best
-        
-        # Execute Triton Prepass Kernel in parallel on the GPU
         grid = lambda meta: (triton.cdiv(v, meta['BLOCK_SIZE']),)
-        triton_prepass_2d_kernel[grid](
-            births, parent, deaths, has_zp, n, m, lut, BLOCK_SIZE=512
-        )
+        
+        if arr.ndim == 2:
+            lut = torch.full((256,), fill_value=255, dtype=torch.uint8, device=arr.device)
+            lut[1] = 0; lut[2] = 1; lut[4] = 2; lut[8] = 3
+            triton_prepass_2d_kernel[grid](
+                births, parent, deaths, has_zp, n, m, lut, BLOCK_SIZE=512
+            )
+        else:
+            triton_prepass_3d_kernel[grid](
+                births, parent, deaths, has_zp, d, n, m, BLOCK_SIZE=512
+            )
         
         # Parallel Pointer Jumping using Triton-compiled path doubling
         # ... (natively flattens the zero-persistence forest on the GPU)
