@@ -39,7 +39,7 @@ class CudaBackend(PHBackend):
         # Fallback to JAX or C++ CPU if CUDA compiling fails or no GPU is present
         if self.module is None or not torch.cuda.is_available():
             import flash_cubical as fc
-            return fc.compute(arr.cpu().numpy()).values
+            return fc.compute(arr.cpu().numpy() if hasattr(arr, 'cpu') else arr).values
             
         # GPU execution: Call the compiled CUDA C++ shared library
         births = arr.flatten()
