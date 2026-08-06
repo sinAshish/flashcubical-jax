@@ -19,6 +19,7 @@ def run_benchmark(dim, use_gpu):
         backends.extend([TritonBackend(), CudaBackend()])
         sizes = [32, 64, 128, 256, 512, 1024]
     else:
+        backends.extend([TritonBackend(), CudaBackend()])
         sizes = [16, 32, 64, 128]
         
     noise_types = ["uniform", "gaussian"]
