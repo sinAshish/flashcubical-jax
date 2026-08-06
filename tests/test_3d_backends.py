@@ -1,6 +1,8 @@
+
 import pytest
 import numpy as np
 import flash_cubical as fc
+import torch
 
 def test_3d_backends():
     # Create a small 3D volume
@@ -29,4 +31,3 @@ def test_3d_backends():
     test_h0_jax = test_h0_jax[np.lexsort((test_h0_jax[:, 1], test_h0_jax[:, 0]))]
     
     assert np.allclose(baseline_h0[:, :2], test_h0_jax[:, :2], atol=1e-5), "JAX 3D failed"
-
