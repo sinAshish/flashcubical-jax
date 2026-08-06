@@ -121,25 +121,27 @@ NumPy array of shape `(n, 3)`, dtype float64.
 
 Draws a persistence diagram coloured by dimension. Returns a matplotlib `Axes`.
 
-## GPU Benchmarking Results
+## 2D GPU Benchmarking Results
 
-A pluggable benchmarking suite is provided under the `benchmark/` folder to compare the native C++ implementation against our Parallel Forest implementations in JAX, PyTorch, Triton, and CUDA C++.
+A pluggable benchmarking suite is provided under the `benchmark/` folder to compare the native C++ implementation against our Parallel Forest implementations in JAX, PyTorch, and CUDA C++.
 
 The following benchmarks were evaluated locally on an **NVIDIA A100-PCIE-40GB GPU** computing the connected components (H0) of noisy grids.
 
-The following tables highlight the performance on massive grids ($512^2+$) where GPU parallelism overtakes CPU sequential clock speeds. **[Full benchmark logs including low-resolution execution times can be found in `benchmark/results/`](benchmark/results/)**.
+The following tables highlight the performance on massive 2D grids ($512^2+$) where GPU parallelism overtakes CPU sequential clock speeds. **[Full 2D benchmark logs can be found in `benchmark/results/2d_gpu.md`](benchmark/results/2d_gpu.md)**.
 
 #### Uniform Noise
 ```text
 Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ----------------------------------------------------------------------------------
-64x64x64     | FlashCubical (C++)        | 0.03      | 324.14       | Baseline
-64x64x64     | JAX (Parallel Forest)     | 1.45      | 400.97       | PASS
-64x64x64     | PyTorch (Parallel Forest) | 19.17     | 2535.15      | PASS
+512x512      | FlashCubical (C++)        | 0.01      | 36.05        | Baseline
+512x512      | JAX (Parallel Forest)     | 0.79      | 258.35       | PASS
+512x512      | PyTorch (Parallel Forest) | 18.63     | 248.09       | PASS
+512x512      | CUDA C++                  | 10.85     | 39.86        | PASS
 ----------------------------------------------------------------------------------
-128x128x128  | FlashCubical (C++)        | 0.06      | 3096.03      | Baseline
-128x128x128  | JAX (Parallel Forest)     | 1.77      | 3131.49      | PASS
-128x128x128  | PyTorch (Parallel Forest) | 25.74     | 6088.28      | PASS
+1024x1024    | FlashCubical (C++)        | 0.09      | 190.21       | Baseline
+1024x1024    | JAX (Parallel Forest)     | 17.79     | 1158.58      | PASS
+1024x1024    | PyTorch (Parallel Forest) | 36.29     | 1035.64      | PASS
+1024x1024    | CUDA C++                  | 14.52     | 159.25       | PASS
 ----------------------------------------------------------------------------------
 ```
 
@@ -147,38 +149,35 @@ Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ```text
 Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ----------------------------------------------------------------------------------
-64x64x64     | FlashCubical (C++)        | 0.03      | 461.82       | Baseline
-64x64x64     | JAX (Parallel Forest)     | 1.77      | 373.28       | PASS
-64x64x64     | PyTorch (Parallel Forest) | 12.91     | 2511.98      | PASS
+512x512      | FlashCubical (C++)        | 0.04      | 36.68        | Baseline
+512x512      | JAX (Parallel Forest)     | 0.58      | 257.13       | PASS
+512x512      | PyTorch (Parallel Forest) | 14.79     | 225.61       | PASS
+512x512      | CUDA C++                  | 9.03      | 36.39        | PASS
 ----------------------------------------------------------------------------------
-128x128x128  | FlashCubical (C++)        | 0.10      | 3034.02      | Baseline
-128x128x128  | JAX (Parallel Forest)     | 2.46      | 2927.63      | PASS
-128x128x128  | PyTorch (Parallel Forest) | 19.76     | 6103.05      | PASS
+1024x1024    | FlashCubical (C++)        | 0.06      | 158.88       | Baseline
+1024x1024    | JAX (Parallel Forest)     | 1.53      | 1123.31      | PASS
+1024x1024    | PyTorch (Parallel Forest) | 19.92     | 1039.20      | PASS
+1024x1024    | CUDA C++                  | 20.06     | 191.72       | PASS
 ----------------------------------------------------------------------------------
 ```
 
-*Note: The JAX (`jax.jit`) and PyTorch compilation times are deliberately excluded via warmup rounds before timings begin. The metrics above represent pure execution latency (which is the standard benchmarking methodology since compilation is a one-time cost in real-world pipelines).*
-
-To run these benchmarks on your machine:
-```bash
-PYTHONPATH=. uv run python benchmark/run_benchmarks.py
-```
+*Note: The JAX (`jax.jit`) and PyTorch compilation times are deliberately excluded via warmup rounds before timings begin.*
 
 ### 3D Volume Benchmarking Results (A100 GPU)
 
-The Parallel Forest tensor backends (JAX, PyTorch, Triton, CUDA C++) natively support massive 3D H0 computation entirely on-the-fly, without relying on offline multi-megabyte binary lookup tables. **[Full 3D benchmark logs can be found in `benchmark/results/`](benchmark/results/)**.
+The Parallel Forest tensor backends (JAX, PyTorch, CUDA C++) natively support massive 3D H0 computation entirely on-the-fly, without relying on offline multi-megabyte binary lookup tables. **[Full 3D benchmark logs can be found in `benchmark/results/3d_gpu.md`](benchmark/results/3d_gpu.md)**.
 
 #### Uniform Noise
 ```text
 Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ----------------------------------------------------------------------------------
-64x64x64     | FlashCubical (C++)        | 0.03      | 324.14       | Baseline
-64x64x64     | JAX (Parallel Forest)     | 1.45      | 400.97       | PASS
-64x64x64     | PyTorch (Parallel Forest) | 19.17     | 2535.15      | PASS
+64x64x64     | FlashCubical (C++)        | 0.03      | 254.39       | Baseline
+64x64x64     | JAX (Parallel Forest)     | 1.72      | 342.01       | PASS
+64x64x64     | PyTorch (Parallel Forest) | 25.33     | 325.44       | PASS
 ----------------------------------------------------------------------------------
-128x128x128  | FlashCubical (C++)        | 0.06      | 3096.03      | Baseline
-128x128x128  | JAX (Parallel Forest)     | 1.77      | 3131.49      | PASS
-128x128x128  | PyTorch (Parallel Forest) | 25.74     | 6088.28      | PASS
+128x128x128  | FlashCubical (C++)        | 0.07      | 2908.20      | Baseline
+128x128x128  | JAX (Parallel Forest)     | 1.72      | 3263.89      | PASS
+128x128x128  | PyTorch (Parallel Forest) | 37.71     | 2910.15      | PASS
 ----------------------------------------------------------------------------------
 ```
 
@@ -186,13 +185,13 @@ Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ```text
 Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ----------------------------------------------------------------------------------
-64x64x64     | FlashCubical (C++)        | 0.03      | 461.82       | Baseline
-64x64x64     | JAX (Parallel Forest)     | 1.77      | 373.28       | PASS
-64x64x64     | PyTorch (Parallel Forest) | 12.91     | 2511.98      | PASS
+64x64x64     | FlashCubical (C++)        | 0.01      | 223.80       | Baseline
+64x64x64     | JAX (Parallel Forest)     | 0.83      | 338.44       | PASS
+64x64x64     | PyTorch (Parallel Forest) | 8.70      | 320.76       | PASS
 ----------------------------------------------------------------------------------
-128x128x128  | FlashCubical (C++)        | 0.10      | 3034.02      | Baseline
-128x128x128  | JAX (Parallel Forest)     | 2.46      | 2927.63      | PASS
-128x128x128  | PyTorch (Parallel Forest) | 19.76     | 6103.05      | PASS
+128x128x128  | FlashCubical (C++)        | 0.09      | 3054.93      | Baseline
+128x128x128  | JAX (Parallel Forest)     | 1.60      | 3196.97      | PASS
+128x128x128  | PyTorch (Parallel Forest) | 21.27     | 2768.37      | PASS
 ----------------------------------------------------------------------------------
 ```
 
