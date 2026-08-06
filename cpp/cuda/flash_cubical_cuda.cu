@@ -68,7 +68,7 @@ __global__ void prepass_2d_cuda_kernel(
     bool is_zero_persistence = (zp_val != 255) && (n_mask > 0);
     
     parent[curr] = is_zero_persistence ? best_older : curr;
-    deaths[curr] = is_zero_persistence ? curr_birth : INFINITY;
+    deaths[curr] = is_zero_persistence ? curr_birth : ::atof("inf");
     has_zp[curr] = is_zero_persistence;
 }
 
@@ -81,7 +81,7 @@ torch::Tensor compute_h0_cuda(torch::Tensor births, int n, int m) {
     auto options_bool = torch::TensorOptions().dtype(torch::kBool).device(births.device());
     
     auto parent = torch::arange(v, options_int);
-    auto deaths = torch::full({v}, INFINITY, options_double);
+    auto deaths = torch::full({v}, ::atof("inf"), options_double);
     auto has_zp = torch::zeros({v}, options_bool);
     
     // Initialize standard LUT configuration for constant memory
@@ -128,28 +128,26 @@ __global__ void prepass_3d_cuda_kernel(
     double min_older_birth = curr_birth;
     bool found_older = false;
     
-#define CHECK_NEIGHBOR(nbr) \
-    do { \
-        double birth_nbr = births[(nbr)]; \
-        if (birth_nbr < curr_birth || (birth_nbr == curr_birth && (nbr) < curr)) { \
-            if (!found_older || birth_nbr < min_older_birth || (birth_nbr == min_older_birth && (nbr) < best_older)) { \
-                best_older = (nbr); \
-                min_older_birth = birth_nbr; \
-                found_older = true; \
-            } \
-        } \
-    } while (0)
+    auto check_neighbor = [&](int nbr) {
+        double birth_nbr = births[nbr];
+        if (birth_nbr < curr_birth || (birth_nbr == curr_birth && nbr < curr)) {
+            if (!found_older || birth_nbr < min_older_birth || (birth_nbr == min_older_birth && nbr < best_older)) {
+                best_older = nbr;
+                min_older_birth = birth_nbr;
+                found_older = true;
+            }
+        }
+    };
     
-    if (z > 0) CHECK_NEIGHBOR(curr - n * m);
-    if (z < d - 1) CHECK_NEIGHBOR(curr + n * m);
-    if (r > 0) CHECK_NEIGHBOR(curr - m);
-    if (r < n - 1) CHECK_NEIGHBOR(curr + m);
-    if (c > 0) CHECK_NEIGHBOR(curr - 1);
-    if (c < m - 1) CHECK_NEIGHBOR(curr + 1);
-#undef CHECK_NEIGHBOR
+    if (z > 0) check_neighbor(curr - n * m);
+    if (z < d - 1) check_neighbor(curr + n * m);
+    if (r > 0) check_neighbor(curr - m);
+    if (r < n - 1) check_neighbor(curr + m);
+    if (c > 0) check_neighbor(curr - 1);
+    if (c < m - 1) check_neighbor(curr + 1);
     
     parent[curr] = found_older ? best_older : curr;
-    deaths[curr] = found_older ? curr_birth : INFINITY;
+    deaths[curr] = found_older ? curr_birth : ::atof("inf");
     has_zp[curr] = found_older;
 }
 
@@ -161,7 +159,7 @@ torch::Tensor compute_h0_cuda_3d(torch::Tensor births, int d, int n, int m) {
     auto options_bool = torch::TensorOptions().dtype(torch::kBool).device(births.device());
     
     auto parent = torch::arange(v, options_int);
-    auto deaths = torch::full({v}, INFINITY, options_double);
+    auto deaths = torch::full({v}, ::atof("inf"), options_double);
     auto has_zp = torch::zeros({v}, options_bool);
     
     int threads = 512;

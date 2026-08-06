@@ -165,7 +165,7 @@ Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 
 ### 3D Volume Benchmarking Results (A100 GPU)
 
-The Parallel Forest tensor backends (JAX, PyTorch, CUDA C++) natively support massive 3D H0 computation entirely on-the-fly, without relying on offline multi-megabyte binary lookup tables. **[Full 3D benchmark logs can be found in `benchmark/results/3d_gpu.md`](benchmark/results/3d_gpu.md)**.
+The pure Python JAX and PyTorch tensor backends natively support massive 3D H0 computation entirely on-the-fly, without relying on offline multi-megabyte binary lookup tables. **[Full 3D benchmark logs can be found in `benchmark/results/3d_gpu.md`](benchmark/results/3d_gpu.md)**.
 
 #### Uniform Noise
 ```text
