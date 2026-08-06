@@ -77,23 +77,13 @@ if HAS_TRITON:
         tl.store(deaths_ptr + curr, tl.where(has_zp, curr_birth, float('inf')), mask=mask)
         tl.store(has_zp_ptr + curr, has_zp, mask=mask)
 
-class TritonBackend(PHBackend):
-    def prepare(self, image: Any) -> Any:
-        arr = torch.tensor(image, dtype=torch.float64)
-        if torch.cuda.is_available():
-            arr = arr.cuda()
-        return arr
 
-    def sync(self):
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-
-
+if HAS_TRITON:
     @triton.jit
     def triton_prepass_3d_kernel(
         births_ptr, parent_ptr, deaths_ptr, has_zp_ptr, d, n, m, 
         BLOCK_SIZE: tl.constexpr
-    ):
+        ):
         pid = tl.program_id(0)
         offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
         v = d * n * m
@@ -181,7 +171,23 @@ class TritonBackend(PHBackend):
         tl.store(deaths_ptr + curr, tl.where(found_older, curr_birth, float('inf')), mask=mask)
         tl.store(has_zp_ptr + curr, found_older, mask=mask)
 
+class TritonBackend(PHBackend):
+    def prepare(self, image: Any) -> Any:
+        arr = torch.tensor(image, dtype=torch.float64)
+        if torch.cuda.is_available():
+            arr = arr.cuda()
+        return arr
+
+    def sync(self):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
     def compute_ph(self, arr: Any) -> np.ndarray:
+        # Fallback to JAX or C++ CPU if Triton is not compiled or CUDA is missing
+        if not HAS_TRITON or not torch.cuda.is_available():
+            import flash_cubical as fc
+            return fc.compute(arr.cpu().numpy() if hasattr(arr, 'cpu') else arr).values
+            
         if arr.ndim == 2:
             n, m = arr.shape
             v = n * m
@@ -200,11 +206,6 @@ class TritonBackend(PHBackend):
             v_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + (c[:, :, :-1] + 1)).flatten()
             u = torch.cat([u_z, u_y, u_x])
             v_ = torch.cat([v_z, v_y, v_x])
-            
-        # Fallback to JAX or C++ CPU if Triton is not compiled or CUDA is missing
-        if not HAS_TRITON or not torch.cuda.is_available():
-            import flash_cubical as fc
-            return fc.compute(arr.cpu().numpy()).values
             
         births = arr.flatten()
         parent = torch.arange(v, dtype=torch.int32, device=arr.device)
