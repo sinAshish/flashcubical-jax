@@ -84,29 +84,28 @@ class PyTorchBackend(PHBackend):
         younger_s = torch.where(diff_s > 0, root_u, torch.where(diff_s < 0, root_v, torch.maximum(root_u, root_v)))
         older_s = torch.where(diff_s > 0, root_v, torch.where(diff_s < 0, root_u, torch.minimum(root_u, root_v)))
         
-        # Phase 4: Stable Sort Saddle Edges
-        order = torch.argsort(saddle_vals, stable=True)
+        # Sort on host CPU using NumPy to avoid PyTorch argsort stability bugs on macOS/Windows
+        saddle_vals_np = saddle_vals.cpu().numpy()
+        younger_s_np = younger_s.cpu().numpy()
+        older_s_np = older_s.cpu().numpy()
         
-        younger_s = younger_s[order]
-        older_s = older_s[order]
-        saddle_vals = saddle_vals[order]
+        order = np.lexsort((older_s_np, younger_s_np, saddle_vals_np))
         
-        # Phase 5: Sequential Union-Find strictly on the minimal saddle topology
-        root_u_list = younger_s.tolist()
-        root_v_list = older_s.tolist()
-        saddle_vals_list = saddle_vals.tolist()
-        births_list = births.tolist()
+        younger_s_list = younger_s_np[order].tolist()
+        older_s_list = older_s_np[order].tolist()
+        saddle_vals_list = saddle_vals_np[order].tolist()
+        births_list = births.cpu().tolist()
         
         uf_parent = list(range(v))
         deaths = [float('inf')] * v
         
-        for i in range(len(root_u_list)):
-            ru = root_u_list[i]
+        for i in range(len(younger_s_list)):
+            ru = younger_s_list[i]
             while uf_parent[ru] != ru:
                 uf_parent[ru] = uf_parent[uf_parent[ru]]
                 ru = uf_parent[ru]
                 
-            rv = root_v_list[i]
+            rv = older_s_list[i]
             while uf_parent[rv] != rv:
                 uf_parent[rv] = uf_parent[uf_parent[rv]]
                 rv = uf_parent[rv]

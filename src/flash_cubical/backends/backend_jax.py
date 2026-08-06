@@ -70,12 +70,6 @@ def phase_1_4(image):
     younger_s = jnp.where(diff_s > 0, root_u, jnp.where(diff_s < 0, root_v, jnp.maximum(root_u, root_v)))
     older_s = jnp.where(diff_s > 0, root_v, jnp.where(diff_s < 0, root_u, jnp.minimum(root_u, root_v)))
     
-    # Phase 4: Stable Sort Saddle Edges
-    order = jnp.lexsort((older_s, younger_s, saddle_vals))
-    younger_s = younger_s[order]
-    older_s = older_s[order]
-    saddle_vals = saddle_vals[order]
-    
     return younger_s, older_s, saddle_vals, births, has_zp
 
 _jit_phases_1_4 = jax.jit(phase_1_4)
@@ -97,11 +91,17 @@ class JaxBackend(PHBackend):
         younger_s_jax, older_s_jax, saddle_vals_jax, births_jax, has_zp_jax = out
         
         # Convert to numpy arrays on CPU
-        younger_s = np.array(younger_s_jax)
-        older_s = np.array(older_s_jax)
-        saddle_vals = np.array(saddle_vals_jax)
+        younger_s_np = np.array(younger_s_jax)
+        older_s_np = np.array(older_s_jax)
+        saddle_vals_np = np.array(saddle_vals_jax)
         births = np.array(births_jax)
         has_zp = np.array(has_zp_jax)
+        
+        # Sort on CPU via NumPy to avoid platform-specific stability bugs
+        order = np.lexsort((older_s_np, younger_s_np, saddle_vals_np))
+        younger_s = younger_s_np[order]
+        older_s = older_s_np[order]
+        saddle_vals = saddle_vals_np[order]
         
         # Truncate at inf
         valid_count = np.searchsorted(saddle_vals, np.inf)

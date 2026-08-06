@@ -4,8 +4,6 @@ from flash_cubical.backends.benchmark_utils import generate_2d_grid, verify_pers
 from flash_cubical.backends.backend_baseline import FlashCubicalBackend
 from flash_cubical.backends.backend_jax import JaxBackend
 from flash_cubical.backends.backend_pytorch import PyTorchBackend
-from flash_cubical.backends.backend_triton import TritonBackend
-from flash_cubical.backends.backend_cuda import CudaBackend
 
 # --- Utils Tests ---
 
@@ -61,11 +59,24 @@ def test_baseline_backend():
 
 @pytest.fixture
 def backends():
-    bs = [JaxBackend(), PyTorchBackend()]
+    bs = []
+    
+    try:
+        from flash_cubical.backends.backend_pytorch import PyTorchBackend
+        bs.append(PyTorchBackend())
+    except Exception:
+        pass
+
+    try:
+        from flash_cubical.backends.backend_jax import JaxBackend
+        import jax
+        bs.append(JaxBackend())
+    except Exception:
+        pass
     
     # Triton and CUDA backends might fail to initialize on macOS/CPU
     try:
-        from flash_cubical.backends.backend_triton import HAS_TRITON
+        from flash_cubical.backends.backend_triton import HAS_TRITON, TritonBackend
         if HAS_TRITON:
             bs.append(TritonBackend())
         else:
@@ -75,6 +86,7 @@ def backends():
         pass
         
     try:
+        from flash_cubical.backends.backend_cuda import CudaBackend
         bs.append(CudaBackend())
     except Exception:
         pass
