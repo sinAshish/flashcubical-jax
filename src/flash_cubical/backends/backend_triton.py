@@ -185,16 +185,27 @@ class TritonBackend(PHBackend):
         if arr.ndim == 2:
             n, m = arr.shape
             v = n * m
+            r, c = torch.meshgrid(torch.arange(n, device=arr.device), torch.arange(m, device=arr.device), indexing='ij')
+            u = torch.cat([(r[:, :-1] * m + c[:, :-1]).flatten(), (r[:-1, :] * m + c[:-1, :]).flatten()])
+            v_ = torch.cat([(r[:, :-1] * m + c[:, 1:]).flatten(), (r[1:, :] * m + c[1:, :]).flatten()])
         else:
             d, n, m = arr.shape
             v = d * n * m
+            z, r, c = torch.meshgrid(torch.arange(d, device=arr.device), torch.arange(n, device=arr.device), torch.arange(m, device=arr.device), indexing='ij')
+            u_z = (z[:-1, :, :] * n * m + r[:-1, :, :] * m + c[:-1, :, :]).flatten()
+            v_z = ((z[:-1, :, :] + 1) * n * m + r[:-1, :, :] * m + c[:-1, :, :]).flatten()
+            u_y = (z[:, :-1, :] * n * m + r[:, :-1, :] * m + c[:, :-1, :]).flatten()
+            v_y = (z[:, :-1, :] * n * m + (r[:, :-1, :] + 1) * m + c[:, :-1, :]).flatten()
+            u_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + c[:, :, :-1]).flatten()
+            v_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + (c[:, :, :-1] + 1)).flatten()
+            u = torch.cat([u_z, u_y, u_x])
+            v_ = torch.cat([v_z, v_y, v_x])
             
         # Fallback to JAX or C++ CPU if Triton is not compiled or CUDA is missing
         if not HAS_TRITON or not torch.cuda.is_available():
             import flash_cubical as fc
             return fc.compute(arr.cpu().numpy()).values
             
-        # GPU execution: Offload to GPU via Triton
         births = arr.flatten()
         parent = torch.arange(v, dtype=torch.int32, device=arr.device)
         deaths = torch.full((v,), float('inf'), dtype=torch.float64, device=arr.device)
@@ -213,10 +224,79 @@ class TritonBackend(PHBackend):
                 births, parent, deaths, has_zp, d, n, m, BLOCK_SIZE=512
             )
         
-        # Parallel Pointer Jumping using Triton-compiled path doubling
-        # ... (natively flattens the zero-persistence forest on the GPU)
+        parent_flat = parent.long()
+        for _ in range(21):
+            new_parent = parent_flat[parent_flat]
+            if torch.equal(parent_flat, new_parent):
+                break
+            parent_flat = new_parent
+        parent = parent_flat.int()
         
-        return torch.stack([births, deaths, torch.zeros_like(births)], dim=1).cpu().numpy()
+        edge_vals = torch.maximum(births[u], births[v_])
+        root_u = parent[u]
+        root_v = parent[v_]
+        
+        valid_saddles = (root_u != root_v)
+        root_u = root_u[valid_saddles]
+        root_v = root_v[valid_saddles]
+        saddle_vals = edge_vals[valid_saddles]
+        
+        b_u_s = births[root_u.long()]
+        b_v_s = births[root_v.long()]
+        diff_s = b_u_s - b_v_s
+        
+        younger_s = torch.where(diff_s > 0, root_u, torch.where(diff_s < 0, root_v, torch.maximum(root_u, root_v)))
+        older_s = torch.where(diff_s > 0, root_v, torch.where(diff_s < 0, root_u, torch.minimum(root_u, root_v)))
+        
+        import numpy as np
+        saddle_vals_np = saddle_vals.cpu().numpy()
+        younger_s_np = younger_s.cpu().numpy()
+        older_s_np = older_s.cpu().numpy()
+        
+        order = np.lexsort((older_s_np, younger_s_np, saddle_vals_np))
+        
+        younger_s_list = younger_s_np[order].tolist()
+        older_s_list = older_s_np[order].tolist()
+        saddle_vals_list = saddle_vals_np[order].tolist()
+        births_list = births.cpu().tolist()
+        
+        uf_parent = list(range(v))
+        deaths_list = [float('inf')] * v
+        
+        for i in range(len(younger_s_list)):
+            ru = younger_s_list[i]
+            while uf_parent[ru] != ru:
+                uf_parent[ru] = uf_parent[uf_parent[ru]]
+                ru = uf_parent[ru]
+                
+            rv = older_s_list[i]
+            while uf_parent[rv] != rv:
+                uf_parent[rv] = uf_parent[uf_parent[rv]]
+                rv = uf_parent[rv]
+                
+            if ru != rv:
+                bu = births_list[ru]
+                bv = births_list[rv]
+                diff_b = bu - bv
+                
+                if diff_b < 0:
+                    old_r = ru
+                    yng_r = rv
+                elif diff_b > 0:
+                    old_r = rv
+                    yng_r = ru
+                else:
+                    old_r = max(ru, rv)
+                    yng_r = min(ru, rv)
+                    
+                uf_parent[yng_r] = old_r
+                deaths_list[yng_r] = saddle_vals_list[i]
+                
+        deaths_tensor = torch.tensor(deaths_list, dtype=arr.dtype, device=arr.device)
+        deaths_tensor[has_zp] = births[has_zp]
+        
+        pairs = torch.stack([births, deaths_tensor, torch.zeros(v, device=arr.device, dtype=arr.dtype)], dim=1)
+        return pairs.cpu().numpy()
 
     def name(self) -> str:
         return "Triton (Parallel Forest)"
