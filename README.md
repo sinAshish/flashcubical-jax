@@ -2,7 +2,11 @@
 
 Fast V-filtration cubical persistent homology for 2D and 3D scalar grids induced by images, impleneting the ideas proposed in [arXiv:2606.04801](https://arxiv.org/abs/2606.04801).
 
-This repository is a fork/extension of the original highly-optimized CPU implementation of [**FlashCubical** (by T-prog123)](https://github.com/T-prog123/FlashCubical). It introduces purely tensor-native and GPU-accelerated backends (in JAX, PyTorch, Triton, and CUDA) for massive parallelization.
+
+This repository is a `fork/extension` of the original highly-optimized CPU implementation of [**FlashCubical** (by T-prog123)](https://github.com/T-prog123/FlashCubical). 
+It introduces purely tensor-native and GPU-accelerated backends (in JAX, PyTorch, Triton, and CUDA) for massive parallelization.
+
+
 
 The original C++ implementation computes H0 (connected components), H1 (loops), and H2 (voids) using a lower-star filtration reliant on massive precomputed binary lookup tables (`.bin` files) to determine local zero-persistence pairs. 
 
