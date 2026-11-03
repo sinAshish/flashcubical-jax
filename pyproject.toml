@@ -29,4 +29,9 @@ wheel.packages = ["src/flash_cubical"]
 [dependency-groups]
 dev = [
     "build>=1.4.4",
+    "pytest>=8.0.0",
+    "matplotlib>=3.8.0",
+    "jax>=0.4.30",
+    "jaxlib>=0.4.30",
+    "torch>=2.1.0",
 ]

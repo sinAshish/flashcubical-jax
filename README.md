@@ -56,12 +56,14 @@ ph.values                             # float64 array, shape (n, 3)
 ph.plot()                             # persistence diagram
 ```
 
-For a 3D volume (CPU backend only):
+For a 3D volume:
 
 ```python
 volume = np.random.rand(64, 64, 64)
-ph = fc.compute(volume)               # computes H0, H1, H2
-ph = fc.compute(volume, h1=False)     # skip H1, only H0 and H2
+ph = fc.compute(volume)                       # CPU: computes H0, H1, H2
+ph = fc.compute(volume, h1=False)             # CPU: skip H1, only H0 and H2
+ph_jax   = fc.compute(volume, backend="jax")      # JAX: 3D H0
+ph_torch = fc.compute(volume, backend="pytorch")  # PyTorch: 3D H0
 ```
 
 ## API
@@ -73,7 +75,7 @@ ph = fc.compute(volume, h1=False)     # skip H1, only H0 and H2
 |`x`|2D or 3D array-like, converted to float64|
 |`min_persistence`|Minimal distance between birth and death values. Must be non-negative.|
 |`h1`|Compute H1. Must be `True` for 2D inputs when using the CPU backend. Can be `False` for 3D to skip H1|
-|`backend`|Computational backend to use. Options: `"cpu"`, `"pytorch"`, `"jax"`, `"triton"`, `"cuda"`. Non-CPU backends compute H0 components. JAX and PyTorch natively support 2D and 3D volumes. Triton and CUDA currently only support 2D.|
+|`backend`|Computational backend to use. Options: `"cpu"`, `"pytorch"`, `"jax"`, `"triton"`, `"cuda"`. Non-CPU backends compute H0 components for both 2D and 3D scalar grids.|
 
 ## Topological Visualization (3D Torus Example)
 
@@ -200,41 +202,55 @@ Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ```
 
 ### Benchmark Results (CPU Fallback)
-The following benchmarks were evaluated locally on a pure CPU environment (falling back to host computation). This isolates the sequential bottlenecks inherent to Python/XLA when stripped of massive GPU parallelism. **[Full CPU benchmark logs can be found in `benchmark/results/2d_cpu.md`](benchmark/results/2d_cpu.md)**.
+The following benchmarks were evaluated locally on a pure CPU environment (Apple Silicon M-series host computation). This isolates the host execution performance of JAX and PyTorch after pre-filtering non-saddle edges before sorting. **[Full CPU benchmark logs can be found in `benchmark/results/2d_cpu.md`](benchmark/results/2d_cpu.md) and [`benchmark/results/3d_cpu.md`](benchmark/results/3d_cpu.md)**.
 
-#### Uniform Noise
+#### 2D Uniform Noise
 ```text
 Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ----------------------------------------------------------------------------------
-512x512      | FlashCubical (C++)        | 0.03      | 34.22        | Baseline
-512x512      | JAX (Parallel Forest)     | 3.06      | 308.15       | PASS
-512x512      | PyTorch (Parallel Forest) | 2.81      | 397.19       | PASS
-512x512      | Triton (Parallel Forest)  | 2.01      | 40.56        | PASS
-512x512      | CUDA C++                  | 1.15      | 34.19        | PASS
+512x512      | FlashCubical (C++)        | 0.00      | 24.59        | Baseline
+512x512      | JAX (Parallel Forest)     | 0.26      | 148.62       | PASS
+512x512      | PyTorch (Parallel Forest) | 0.05      | 147.66       | PASS
+512x512      | Triton (Parallel Forest)  | 0.02      | 25.66        | PASS
+512x512      | CUDA C++ (Numba-free)     | 0.02      | 25.64        | PASS
 ----------------------------------------------------------------------------------
-1024x1024    | FlashCubical (C++)        | 0.03      | 169.95       | Baseline
-1024x1024    | JAX (Parallel Forest)     | 0.74      | 1429.50      | PASS
-1024x1024    | PyTorch (Parallel Forest) | 18.43     | 1576.04      | PASS
-1024x1024    | Triton (Parallel Forest)  | 0.76      | 170.75       | PASS
-1024x1024    | CUDA C++                  | 1.35      | 150.80       | PASS
+1024x1024    | FlashCubical (C++)        | 0.01      | 104.96       | Baseline
+1024x1024    | JAX (Parallel Forest)     | 0.30      | 723.24       | PASS
+1024x1024    | PyTorch (Parallel Forest) | 0.06      | 706.44       | PASS
+1024x1024    | Triton (Parallel Forest)  | 0.05      | 108.08       | PASS
+1024x1024    | CUDA C++ (Numba-free)     | 0.03      | 108.43       | PASS
 ----------------------------------------------------------------------------------
 ```
 
-#### Gaussian Noise
+#### 2D Gaussian Noise
 ```text
 Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ----------------------------------------------------------------------------------
-512x512      | FlashCubical (C++)        | 0.02      | 33.87        | Baseline
-512x512      | JAX (Parallel Forest)     | 1.00      | 317.35       | PASS
-512x512      | PyTorch (Parallel Forest) | 16.04     | 432.61       | PASS
-512x512      | Triton (Parallel Forest)  | 1.39      | 74.46        | PASS
-512x512      | CUDA C++                  | 1.26      | 33.50        | PASS
+512x512      | FlashCubical (C++)        | 0.00      | 24.65        | Baseline
+512x512      | JAX (Parallel Forest)     | 0.26      | 145.14       | PASS
+512x512      | PyTorch (Parallel Forest) | 0.05      | 144.77       | PASS
+512x512      | Triton (Parallel Forest)  | 0.02      | 25.89        | PASS
+512x512      | CUDA C++ (Numba-free)     | 0.02      | 25.79        | PASS
 ----------------------------------------------------------------------------------
-1024x1024    | FlashCubical (C++)        | 0.05      | 147.01       | Baseline
-1024x1024    | JAX (Parallel Forest)     | 1.25      | 1433.88      | PASS
-1024x1024    | PyTorch (Parallel Forest) | 9.04      | 1453.98      | PASS
-1024x1024    | Triton (Parallel Forest)  | 1.42      | 162.13       | PASS
-1024x1024    | CUDA C++                  | 8.77      | 142.26       | PASS
+1024x1024    | FlashCubical (C++)        | 0.01      | 103.36       | Baseline
+1024x1024    | JAX (Parallel Forest)     | 0.28      | 718.85       | PASS
+1024x1024    | PyTorch (Parallel Forest) | 0.07      | 709.47       | PASS
+1024x1024    | Triton (Parallel Forest)  | 0.03      | 106.98       | PASS
+1024x1024    | CUDA C++ (Numba-free)     | 0.03      | 106.50       | PASS
+----------------------------------------------------------------------------------
+```
+
+#### 3D Uniform Noise (CPU)
+```text
+Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
+----------------------------------------------------------------------------------
+64x64x64     | FlashCubical (C++)        | 0.00      | 174.97       | Baseline
+64x64x64     | JAX (Parallel Forest)     | 0.28      | 218.26       | PASS
+64x64x64     | PyTorch (Parallel Forest) | 0.08      | 223.54       | PASS
+----------------------------------------------------------------------------------
+128x128x128  | FlashCubical (C++)        | 0.02      | 2596.63      | Baseline
+128x128x128  | JAX (Parallel Forest)     | 0.38      | 2323.61      | PASS
+128x128x128  | PyTorch (Parallel Forest) | 0.13      | 2306.31      | PASS
 ----------------------------------------------------------------------------------
 ```
 
@@ -242,7 +258,7 @@ Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 
 To run these benchmarks on your machine:
 ```bash
-PYTHONPATH=. uv run python benchmark/run_benchmarks.py
+uv run python benchmark/run_benchmarks.py
 ```
 
 ---
@@ -258,11 +274,11 @@ The original C++ implementation in `FlashCubical` uses a highly optimized **sequ
 ### The JAX/PyTorch Method (Pure On-The-Fly Tensor Math)
 Because shipping large binary blobs defeats the purpose of a readable, pure-Python tensor implementation (and because GPU memory lookups for 8MB tables are slow compared to raw ALU compute), we entirely abandoned the `.bin` lookup tables. Our JAX/PyTorch implementation adapts established parallel graph algorithms into a **purely on-the-fly tensor-native** format:
 
-1. **Parallel Zero-Persistence Flow (Mathematical Pruning)**: Instead of looking up pre-solved answers in a `.bin` file, we mathematically calculate the steepest descending neighbor for all $V$ vertices simultaneously in a single tensor operation using `segment_min` or `scatter_reduce`. This establishes a directed "gradient forest" mapping younger vertices directly to older ones purely on-the-fly.
-2. **Parallel Pointer Jumping (Path Doubling)**: We flatten this entire zero-persistence forest in parallel using path doubling (`parent = parent[parent]`). Because the path lengths halve at each step, exactly $21$ iterations are guaranteed to flatten a $1024\times1024$ grid, snapping all vertices to their local minimum root. No loops!
-3. **Saddle Edge Extraction**: Edges that are not part of the zero-persistence forest are "saddles" that merge components. We filter out the internal ones and map the saddles directly to the flattened roots.
-4. **Stable Sort**: We lexicographically sort the remaining saddles in parallel.
-5. **Sequential CPU Offload**: Because sequential pointer-chasing on GPU architectures degrades performance severely, we transfer the sorted subset of saddles back to the host and compute the final Union-Find loop on the CPU (taking milliseconds instead of seconds).
+1. **Parallel Zero-Persistence Forest (Mathematical Pruning)**: Instead of looking up pre-solved answers in a `.bin` file, we select the canonical older neighbor (lowest vertex index among strictly older neighbors) for all $V$ vertices simultaneously in a single tensor operation using `segment_min` or `scatter_reduce`. Because every edge $(y, x)$ to an older neighbor $x$ of $y$ enters at filtration value $b(y)$, this forms a valid directed zero-persistence spanning forest purely on-the-fly.
+2. **Parallel Pointer Jumping (Path Doubling)**: We flatten this entire zero-persistence forest in parallel using path doubling (`parent = parent[parent]`). Because the path lengths halve at each step, $\lceil \log_2(V) \rceil$ iterations are guaranteed to flatten the forest, snapping all vertices to their local minimum root.
+3. **Saddle Edge Extraction**: Edges that are not part of the zero-persistence forest are candidate "saddles" that merge components. We filter out internal edges (`root_u == root_v`) and map the remaining saddle edges directly to their flattened local-minimum roots.
+4. **Stable Sort**: We filter to valid saddle edges and sort them by filtration value.
+5. **Sequential CPU Offload**: Because sequential pointer-chasing on GPU architectures incurs high latency, we resolve the final Kruskal Union-Find merge over the reduced set of saddle edges on the host.
 
 ### Differences and Trade-offs
 - **CPU Performance**: Native C++ is significantly faster on pure CPUs because it naturally executes sequential pointer chasing without incurring memory transfer or massive $O(N \log N)$ sorting penalties on all vertices.

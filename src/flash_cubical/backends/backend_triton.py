@@ -16,90 +16,85 @@ except ImportError:
 if HAS_TRITON:
     @triton.jit
     def triton_prepass_2d_kernel(
-        births_ptr, parent_ptr, deaths_ptr, has_zp_ptr, n, m, 
+        births_ptr, parent_ptr, deaths_ptr, has_zp_ptr, n, m,
         LUT_ptr, BLOCK_SIZE: tl.constexpr
     ):
         pid = tl.program_id(0)
         offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
         v = n * m
         mask = offsets < v
-        
+
         curr = offsets
         curr_birth = tl.load(births_ptr + curr, mask=mask)
-        
+
         r = curr // m
         c = curr % m
-        
-        # Build 8-bit neighbor mask (4-connected in 2D)
+
+        # Build 4-bit neighbor mask (4-connected in 2D)
         n_mask = 0
-        
+
         # Up (r > 0)
         valid_up = (r > 0) & mask
         birth_up = tl.load(births_ptr + (curr - m), mask=valid_up, other=float('inf'))
         is_up_older = (birth_up < curr_birth) | ((birth_up == curr_birth) & ((curr - m) < curr))
         n_mask = tl.where(is_up_older & valid_up, n_mask | 1, n_mask)
-        
+
         # Down (r < n - 1)
         valid_down = (r < n - 1) & mask
         birth_down = tl.load(births_ptr + (curr + m), mask=valid_down, other=float('inf'))
         is_down_older = (birth_down < curr_birth) | ((birth_down == curr_birth) & ((curr + m) < curr))
         n_mask = tl.where(is_down_older & valid_down, n_mask | 2, n_mask)
-        
+
         # Left (c > 0)
         valid_left = (c > 0) & mask
         birth_left = tl.load(births_ptr + (curr - 1), mask=valid_left, other=float('inf'))
         is_left_older = (birth_left < curr_birth) | ((birth_left == curr_birth) & ((curr - 1) < curr))
         n_mask = tl.where(is_left_older & valid_left, n_mask | 4, n_mask)
-        
+
         # Right (c < m - 1)
         valid_right = (c < m - 1) & mask
         birth_right = tl.load(births_ptr + (curr + 1), mask=valid_right, other=float('inf'))
         is_right_older = (birth_right < curr_birth) | ((birth_right == curr_birth) & ((curr + 1) < curr))
         n_mask = tl.where(is_right_older & valid_right, n_mask | 8, n_mask)
-        
-        # Query LUT (Shared Memory)
-        # In a real Triton GPU execution, LUT_ptr resides in Shared/L1 cache.
-        # If n_mask > 0, we fetch the best older neighbor.
+
+        # Query LUT
         zp_val = tl.load(LUT_ptr + n_mask, mask=(n_mask > 0) & mask, other=255)
-        
+
         # Map best older neighbor index
-        # LUT output encodes which of the 4 neighbors is the best older
         best_older = curr
         best_older = tl.where(zp_val == 0, curr - m, best_older)
         best_older = tl.where(zp_val == 1, curr + m, best_older)
         best_older = tl.where(zp_val == 2, curr - 1, best_older)
         best_older = tl.where(zp_val == 3, curr + 1, best_older)
-        
-        # If the best older exists, we merge immediately (zero-persistence)
+
         has_zp = (zp_val != 255) & (n_mask > 0)
-        
+
         tl.store(parent_ptr + curr, tl.where(has_zp, best_older, curr), mask=mask)
         tl.store(deaths_ptr + curr, tl.where(has_zp, curr_birth, float('inf')), mask=mask)
         tl.store(has_zp_ptr + curr, has_zp, mask=mask)
 
 
-if HAS_TRITON:
     @triton.jit
     def triton_prepass_3d_kernel(
-        births_ptr, parent_ptr, deaths_ptr, has_zp_ptr, d, n, m, 
+        births_ptr, parent_ptr, deaths_ptr, has_zp_ptr, d, n, m,
         BLOCK_SIZE: tl.constexpr
-        ):
+    ):
         pid = tl.program_id(0)
         offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
         v = d * n * m
         mask = offsets < v
-        
+
         curr = offsets
         curr_birth = tl.load(births_ptr + curr, mask=mask)
-        
+
         z = curr // (n * m)
         r = (curr // m) % n
         c = curr % m
-        
+
         best_older = curr
         min_older_birth = curr_birth
         found_older = tl.zeros([BLOCK_SIZE], dtype=tl.int1)
-        
+
         # Z Up (z > 0)
         valid = (z > 0) & mask
         nbr = curr - (n * m)
@@ -110,7 +105,7 @@ if HAS_TRITON:
         best_older = tl.where(update, nbr, best_older)
         min_older_birth = tl.where(update, birth, min_older_birth)
         found_older = found_older | (is_older & valid)
-        
+
         # Z Down (z < d - 1)
         valid = (z < d - 1) & mask
         nbr = curr + (n * m)
@@ -132,7 +127,7 @@ if HAS_TRITON:
         best_older = tl.where(update, nbr, best_older)
         min_older_birth = tl.where(update, birth, min_older_birth)
         found_older = found_older | (is_older & valid)
-        
+
         # Y Down (r < n - 1)
         valid = (r < n - 1) & mask
         nbr = curr + m
@@ -143,7 +138,7 @@ if HAS_TRITON:
         best_older = tl.where(update, nbr, best_older)
         min_older_birth = tl.where(update, birth, min_older_birth)
         found_older = found_older | (is_older & valid)
-        
+
         # X Left (c > 0)
         valid = (c > 0) & mask
         nbr = curr - 1
@@ -154,7 +149,7 @@ if HAS_TRITON:
         best_older = tl.where(update, nbr, best_older)
         min_older_birth = tl.where(update, birth, min_older_birth)
         found_older = found_older | (is_older & valid)
-        
+
         # X Right (c < m - 1)
         valid = (c < m - 1) & mask
         nbr = curr + 1
@@ -165,15 +160,16 @@ if HAS_TRITON:
         best_older = tl.where(update, nbr, best_older)
         min_older_birth = tl.where(update, birth, min_older_birth)
         found_older = found_older | (is_older & valid)
-        
+
         # Store results
         tl.store(parent_ptr + curr, tl.where(found_older, best_older, curr), mask=mask)
         tl.store(deaths_ptr + curr, tl.where(found_older, curr_birth, float('inf')), mask=mask)
         tl.store(has_zp_ptr + curr, found_older, mask=mask)
 
+
 class TritonBackend(PHBackend):
     def prepare(self, image: Any) -> Any:
-        arr = torch.tensor(image, dtype=torch.float64)
+        arr = torch.as_tensor(image, dtype=torch.float64)
         if torch.cuda.is_available():
             arr = arr.cuda()
         return arr
@@ -183,11 +179,19 @@ class TritonBackend(PHBackend):
             torch.cuda.synchronize()
 
     def compute_ph(self, arr: Any) -> np.ndarray:
-        # Fallback to JAX or C++ CPU if Triton is not compiled or CUDA is missing
+        if not isinstance(arr, torch.Tensor):
+            arr = self.prepare(arr)
+
+        # Fallback to C++ CPU (H0 only) if Triton is not compiled or CUDA is missing
         if not HAS_TRITON or not torch.cuda.is_available():
             import flash_cubical as fc
-            return fc.compute(arr.cpu().numpy() if hasattr(arr, 'cpu') else arr).values
-            
+            np_arr = arr.cpu().numpy() if hasattr(arr, "cpu") else np.asarray(arr)
+            res = fc.compute(np_arr, h1=(np_arr.ndim == 2)).values
+            return res[res[:, 2] == 0]
+
+        if not arr.is_cuda:
+            arr = arr.cuda()
+
         if arr.ndim == 2:
             n, m = arr.shape
             v = n * m
@@ -206,17 +210,26 @@ class TritonBackend(PHBackend):
             v_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + (c[:, :, :-1] + 1)).flatten()
             u = torch.cat([u_z, u_y, u_x])
             v_ = torch.cat([v_z, v_y, v_x])
-            
+
         births = arr.flatten()
         parent = torch.arange(v, dtype=torch.int32, device=arr.device)
         deaths = torch.full((v,), float('inf'), dtype=torch.float64, device=arr.device)
         has_zp = torch.zeros(v, dtype=torch.bool, device=arr.device)
-        
+
         grid = lambda meta: (triton.cdiv(v, meta['BLOCK_SIZE']),)
-        
+
         if arr.ndim == 2:
+            # Populate all 4-bit masks (1..15) so vertices with >=2 older neighbors are pruned in Phase 1
             lut = torch.full((256,), fill_value=255, dtype=torch.uint8, device=arr.device)
-            lut[1] = 0; lut[2] = 1; lut[4] = 2; lut[8] = 3
+            for mask_val in range(1, 16):
+                if mask_val & 1:
+                    lut[mask_val] = 0
+                elif mask_val & 2:
+                    lut[mask_val] = 1
+                elif mask_val & 4:
+                    lut[mask_val] = 2
+                elif mask_val & 8:
+                    lut[mask_val] = 3
             triton_prepass_2d_kernel[grid](
                 births, parent, deaths, has_zp, n, m, lut, BLOCK_SIZE=512
             )
@@ -224,78 +237,73 @@ class TritonBackend(PHBackend):
             triton_prepass_3d_kernel[grid](
                 births, parent, deaths, has_zp, d, n, m, BLOCK_SIZE=512
             )
-        
+
         parent_flat = parent.long()
-        for _ in range(21):
-            new_parent = parent_flat[parent_flat]
-            if torch.equal(parent_flat, new_parent):
-                break
-            parent_flat = new_parent
+        num_steps = max(1, int(np.ceil(np.log2(max(v, 2)))))
+        for _ in range(num_steps):
+            parent_flat = parent_flat[parent_flat]
         parent = parent_flat.int()
-        
+
         edge_vals = torch.maximum(births[u], births[v_])
         root_u = parent[u]
         root_v = parent[v_]
-        
+
         valid_saddles = (root_u != root_v)
         root_u = root_u[valid_saddles]
         root_v = root_v[valid_saddles]
         saddle_vals = edge_vals[valid_saddles]
-        
+
         b_u_s = births[root_u.long()]
         b_v_s = births[root_v.long()]
-        diff_s = b_u_s - b_v_s
-        
-        younger_s = torch.where(diff_s > 0, root_u, torch.where(diff_s < 0, root_v, torch.maximum(root_u, root_v)))
-        older_s = torch.where(diff_s > 0, root_v, torch.where(diff_s < 0, root_u, torch.minimum(root_u, root_v)))
-        
-        import numpy as np
+
+        younger_s = torch.where(b_u_s > b_v_s, root_u, torch.where(b_u_s < b_v_s, root_v, torch.maximum(root_u, root_v)))
+        older_s = torch.where(b_u_s > b_v_s, root_v, torch.where(b_u_s < b_v_s, root_u, torch.minimum(root_u, root_v)))
+
         saddle_vals_np = saddle_vals.cpu().numpy()
         younger_s_np = younger_s.cpu().numpy()
         older_s_np = older_s.cpu().numpy()
-        
-        order = np.lexsort((older_s_np, younger_s_np, saddle_vals_np))
-        
+
+        order = np.argsort(saddle_vals_np, kind="stable")
+
         younger_s_list = younger_s_np[order].tolist()
         older_s_list = older_s_np[order].tolist()
         saddle_vals_list = saddle_vals_np[order].tolist()
         births_list = births.cpu().tolist()
-        
+
         uf_parent = list(range(v))
         deaths_list = [float('inf')] * v
-        
+
         for i in range(len(younger_s_list)):
             ru = younger_s_list[i]
             while uf_parent[ru] != ru:
                 uf_parent[ru] = uf_parent[uf_parent[ru]]
                 ru = uf_parent[ru]
-                
+
             rv = older_s_list[i]
             while uf_parent[rv] != rv:
                 uf_parent[rv] = uf_parent[uf_parent[rv]]
                 rv = uf_parent[rv]
-                
+
             if ru != rv:
                 bu = births_list[ru]
                 bv = births_list[rv]
-                diff_b = bu - bv
-                
-                if diff_b < 0:
+
+                if bu < bv:
                     old_r = ru
                     yng_r = rv
-                elif diff_b > 0:
+                elif bu > bv:
                     old_r = rv
                     yng_r = ru
                 else:
-                    old_r = max(ru, rv)
-                    yng_r = min(ru, rv)
-                    
+                    old_r = min(ru, rv)
+                    yng_r = max(ru, rv)
+
                 uf_parent[yng_r] = old_r
                 deaths_list[yng_r] = saddle_vals_list[i]
-                
+
         deaths_tensor = torch.tensor(deaths_list, dtype=arr.dtype, device=arr.device)
         deaths_tensor[has_zp] = births[has_zp]
-        
+
         pairs = torch.stack([births, deaths_tensor, torch.zeros(v, device=arr.device, dtype=arr.dtype)], dim=1)
         return pairs.cpu().numpy()
 

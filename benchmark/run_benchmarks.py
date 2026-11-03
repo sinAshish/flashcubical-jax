@@ -78,10 +78,8 @@ def run_suite():
                     # Convert to numpy for verification
                     if hasattr(res, "cpu"):
                         res_np = res.cpu().numpy()
-                    elif hasattr(res, "device_buffer"):
-                        res_np = np.array(res)
                     elif not isinstance(res, np.ndarray):
-                        res_np = np.array(res)
+                        res_np = np.asarray(res)
                     else:
                         res_np = res
                     

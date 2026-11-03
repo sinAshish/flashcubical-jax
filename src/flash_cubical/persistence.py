@@ -63,7 +63,7 @@ class Persistence:
             ax.set_title("Persistence Diagram")
             return ax
 
-        finite_mask = np.isfinite(v[:, 1])
+        finite_mask = np.isfinite(v[:, 0]) & np.isfinite(v[:, 1])
         finite = v[finite_mask]
 
         dims = sorted(int(d) for d in np.unique(v[:, 2]))

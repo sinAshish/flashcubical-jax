@@ -1,8 +1,3 @@
-from typing import Protocol, Any
-import numpy as np
+from flash_cubical.backends.backend_protocol import PHBackend
 
-class PHBackend(Protocol):
-    def compute_ph(self, image: Any) -> np.ndarray:
-        ...
-    def name(self) -> str:
-        ...
+__all__ = ["PHBackend"]

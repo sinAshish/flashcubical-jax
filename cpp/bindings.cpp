@@ -31,6 +31,12 @@ static py::array_t<double> _compute(
             "cubicalp: input must be 2D or 3D, got " +
             std::to_string(ndim) + "D");
     }
+    for (int i = 0; i < ndim; ++i) {
+        if (buf.shape[i] <= 0) {
+            throw py::value_error(
+                "cubicalp: image dimensions must be positive");
+        }
+    }
     if (ndim == 2 && !h1) {
         throw py::value_error(
             "cubicalp: h1=False is only valid for 3D inputs; "

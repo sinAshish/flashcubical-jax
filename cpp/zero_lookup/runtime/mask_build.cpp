@@ -96,6 +96,12 @@ void propagate_offset3d(std::vector<std::uint32_t>& masks,
                         int dx,
                         int dy,
                         int dz) {
+    if (depth == 0 || rows == 0 || cols == 0) {
+        return;
+    }
+    if ((dz != 0 && depth < 2) || (dy != 0 && rows < 2) || (dx != 0 && cols < 2)) {
+        return;
+    }
     const std::uint32_t bit_b_sees_a = bit3d_from_offset(-dx, -dy, -dz);
     const std::uint32_t bit_a_sees_b = bit3d_from_offset(dx, dy, dz);
 
@@ -173,6 +179,9 @@ MaskBuild3D build_masks3d(const double* values,
     const std::size_t plane = rows * cols;
     const std::size_t n_vertices = depth * plane;
     MaskBuild3D out;
+    if (depth == 0 || rows == 0 || cols == 0) {
+        return out;
+    }
     out.masks.assign(n_vertices, 0);
 
     propagate_offset3d(out.masks, values, value_codes, depth, rows, cols,

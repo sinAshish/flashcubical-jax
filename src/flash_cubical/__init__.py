@@ -41,11 +41,11 @@ def compute(x, *, min_persistence: float = 0.0, h1: bool = True, backend: str = 
         - For 2D inputs: must be True (raising ValueError otherwise) when using the 'cpu' backend.
     backend : str, optional
         The computational backend to use. Options are:
-        - "cpu" (default): The highly-optimized C++ native implementation. Supports 2D and 3D.
-        - "pytorch": PyTorch GPU-accelerated Parallel Forest (2D H0 only).
-        - "jax": JAX GPU-accelerated Parallel Forest (2D H0 only).
-        - "triton": Triton GPU-accelerated Parallel Forest (2D H0 only).
-        - "cuda": CUDA C++ GPU-accelerated Parallel Forest (2D H0 only).
+        - "cpu" (default): The highly-optimized C++ native implementation. Supports 2D and 3D (H0, H1, H2).
+        - "pytorch": PyTorch Parallel Forest (2D and 3D H0).
+        - "jax": JAX Parallel Forest (2D and 3D H0).
+        - "triton": Triton Parallel Forest (2D and 3D H0).
+        - "cuda": CUDA C++ Parallel Forest (2D and 3D H0).
 
     Returns
     -------
@@ -67,6 +67,14 @@ def compute(x, *, min_persistence: float = 0.0, h1: bool = True, backend: str = 
         raise ValueError(
             f"Input must be 2D or 3D, got {x.ndim}D array."
         )
+
+    if 0 in x.shape:
+        raise ValueError(
+            f"Input image dimensions must be positive, got shape {x.shape}."
+        )
+
+    if np.isnan(x).any():
+        raise ValueError("Input array must not contain NaN values.")
 
     if min_persistence < 0.0:
         raise ValueError(
@@ -92,9 +100,6 @@ def compute(x, *, min_persistence: float = 0.0, h1: bool = True, backend: str = 
         arr = _compute_native(x, h1)
         return Persistence(arr)
 
-    if x.ndim != 2 and backend in ["unknown_placeholder_to_force_skip"]:
-        raise ValueError(f"The '{backend}' backend currently only supports 2D inputs for H0 computation. 3D coming soon.")
-
     # Lazy import backends to avoid making deep learning frameworks hard dependencies
     b_inst = None
     if backend == "pytorch":
@@ -114,13 +119,14 @@ def compute(x, *, min_persistence: float = 0.0, h1: bool = True, backend: str = 
 
     prepared = b_inst.prepare(x) if hasattr(b_inst, "prepare") else x
     res = b_inst.compute_ph(prepared)
-    
+
     # Convert result back to CPU numpy array if needed
     if hasattr(res, "cpu"):
         res = res.cpu().numpy()
-    elif hasattr(res, "device_buffer"):
-        res = np.array(res)
     elif not isinstance(res, np.ndarray):
-        res = np.array(res)
+        res = np.asarray(res)
+
+    # Filter out zero-persistence pairs (birth == death) for consistency with the CPU backend
+    res = res[res[:, 0] != res[:, 1]]
 
     return Persistence(res)

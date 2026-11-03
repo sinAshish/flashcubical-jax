@@ -150,6 +150,20 @@ def test_backends_accuracy_single_peak(backends, baseline_backend):
         prepared_grid = backend.prepare(grid) if hasattr(backend, "prepare") else grid
         res = backend.compute_ph(prepared_grid)
         if hasattr(res, "cpu"): res = res.cpu().numpy()
-        elif hasattr(res, "device_buffer"): res = np.array(res)
-        elif not isinstance(res, np.ndarray): res = np.array(res)
+        elif not isinstance(res, np.ndarray): res = np.asarray(res)
         assert verify_persistence(baseline_res, res), f"{backend.name()} failed on single peak"
+
+
+def test_backends_direct_compute_ph_without_prepare(backends, baseline_backend):
+    """Ensure compute_ph() accepts raw NumPy arrays directly without calling prepare()."""
+    grid = generate_2d_grid(16, "uniform")
+    baseline_res = baseline_backend.compute_ph(grid)
+
+    for backend in backends:
+        res = backend.compute_ph(grid)
+        if hasattr(res, "cpu"):
+            res = res.cpu().numpy()
+        elif not isinstance(res, np.ndarray):
+            res = np.asarray(res)
+        assert verify_persistence(baseline_res, res), f"{backend.name()} failed direct compute_ph(grid)"
+

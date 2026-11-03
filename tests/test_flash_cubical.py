@@ -192,3 +192,40 @@ def test_list_input_accepted():
     x = [[float(i + j) / 10 for j in range(4)] for i in range(4)]
     ph = fc.compute(x)
     assert isinstance(ph, Persistence)
+
+
+def test_empty_2d_raises():
+    with pytest.raises(ValueError, match="positive"):
+        fc.compute(np.zeros((0, 5)))
+
+
+def test_empty_3d_raises():
+    with pytest.raises(ValueError, match="positive"):
+        fc.compute(np.zeros((0, 5, 5)))
+
+
+def test_nan_input_raises():
+    arr = make_2d()
+    arr[0, 0] = np.nan
+    with pytest.raises(ValueError, match="NaN"):
+        fc.compute(arr)
+
+
+def test_plot_handles_neg_inf_birth():
+    pytest.importorskip("matplotlib")
+    import matplotlib.pyplot as plt
+
+    ph = Persistence(np.array([[-np.inf, 0.2, 0.0], [0.1, 0.5, 0.0], [0.0, np.inf, 0.0]]))
+    ax = ph.plot()
+    for line in ax.get_lines():
+        assert np.all(np.isfinite(line.get_xdata()))
+        assert np.all(np.isfinite(line.get_ydata()))
+    plt.close("all")
+
+
+@pytest.mark.parametrize("backend", ["jax", "pytorch", "triton", "cuda"])
+def test_non_cpu_backends_filter_zero_persistence(backend):
+    grid = make_2d(8, 8)
+    ph = fc.compute(grid, backend=backend)
+    assert np.all(ph.values[:, 0] != ph.values[:, 1])
+

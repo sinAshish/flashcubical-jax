@@ -36,7 +36,7 @@ jobs:
 
       - name: Run Topological Accuracy Tests
         run: |
-          uv run pytest tests/test_benchmarks.py -v
+          uv run pytest -v
 
       - name: Verify PEP 517 Build Compilation
         run: |
