@@ -40,3 +40,32 @@ dev/
 *.DS_Store
 Thumbs.db
 .worktrees/
+
+# Virtual environments
+.venv/
+venv/
+
+# AI / coding agents
+.pi/
+.agents/
+.claude/
+.cursor/
+.codex/
+.gemini/
+.copilot/
+.windsurf/
+.aider*
+CLAUDE.md
+AGENTS.md
+
+# Keys, secrets, and environment variables
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*credentials*.json
+*secret*
+
