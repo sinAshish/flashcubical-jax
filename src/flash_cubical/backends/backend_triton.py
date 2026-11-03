@@ -1,6 +1,8 @@
 import torch
+import torch.nn.functional as F
 import numpy as np
 from typing import Any
+from .._core import resolve_saddles as _resolve_saddles
 from .backend_protocol import PHBackend
 
 # OpenAI Triton is strictly compiled and executed on NVIDIA GPUs.
@@ -57,10 +59,8 @@ if HAS_TRITON:
         is_right_older = (birth_right < curr_birth) | ((birth_right == curr_birth) & ((curr + 1) < curr))
         n_mask = tl.where(is_right_older & valid_right, n_mask | 8, n_mask)
 
-        # Query LUT
         zp_val = tl.load(LUT_ptr + n_mask, mask=(n_mask > 0) & mask, other=255)
 
-        # Map best older neighbor index
         best_older = curr
         best_older = tl.where(zp_val == 0, curr - m, best_older)
         best_older = tl.where(zp_val == 1, curr + m, best_older)
@@ -192,25 +192,7 @@ class TritonBackend(PHBackend):
         if not arr.is_cuda:
             arr = arr.cuda()
 
-        if arr.ndim == 2:
-            n, m = arr.shape
-            v = n * m
-            r, c = torch.meshgrid(torch.arange(n, device=arr.device), torch.arange(m, device=arr.device), indexing='ij')
-            u = torch.cat([(r[:, :-1] * m + c[:, :-1]).flatten(), (r[:-1, :] * m + c[:-1, :]).flatten()])
-            v_ = torch.cat([(r[:, :-1] * m + c[:, 1:]).flatten(), (r[1:, :] * m + c[1:, :]).flatten()])
-        else:
-            d, n, m = arr.shape
-            v = d * n * m
-            z, r, c = torch.meshgrid(torch.arange(d, device=arr.device), torch.arange(n, device=arr.device), torch.arange(m, device=arr.device), indexing='ij')
-            u_z = (z[:-1, :, :] * n * m + r[:-1, :, :] * m + c[:-1, :, :]).flatten()
-            v_z = ((z[:-1, :, :] + 1) * n * m + r[:-1, :, :] * m + c[:-1, :, :]).flatten()
-            u_y = (z[:, :-1, :] * n * m + r[:, :-1, :] * m + c[:, :-1, :]).flatten()
-            v_y = (z[:, :-1, :] * n * m + (r[:, :-1, :] + 1) * m + c[:, :-1, :]).flatten()
-            u_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + c[:, :, :-1]).flatten()
-            v_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + (c[:, :, :-1] + 1)).flatten()
-            u = torch.cat([u_z, u_y, u_x])
-            v_ = torch.cat([v_z, v_y, v_x])
-
+        v = arr.numel()
         births = arr.flatten()
         parent = torch.arange(v, dtype=torch.int32, device=arr.device)
         deaths = torch.full((v,), float('inf'), dtype=torch.float64, device=arr.device)
@@ -219,21 +201,22 @@ class TritonBackend(PHBackend):
         grid = lambda meta: (triton.cdiv(v, meta['BLOCK_SIZE']),)
 
         if arr.ndim == 2:
-            # Populate all 4-bit masks (1..15) so vertices with >=2 older neighbors are pruned in Phase 1
+            n, m = arr.shape
             lut = torch.full((256,), fill_value=255, dtype=torch.uint8, device=arr.device)
             for mask_val in range(1, 16):
                 if mask_val & 1:
                     lut[mask_val] = 0
-                elif mask_val & 2:
-                    lut[mask_val] = 1
                 elif mask_val & 4:
                     lut[mask_val] = 2
                 elif mask_val & 8:
                     lut[mask_val] = 3
+                elif mask_val & 2:
+                    lut[mask_val] = 1
             triton_prepass_2d_kernel[grid](
                 births, parent, deaths, has_zp, n, m, lut, BLOCK_SIZE=512
             )
         else:
+            d, n, m = arr.shape
             triton_prepass_3d_kernel[grid](
                 births, parent, deaths, has_zp, d, n, m, BLOCK_SIZE=512
             )
@@ -242,70 +225,62 @@ class TritonBackend(PHBackend):
         num_steps = max(1, int(np.ceil(np.log2(max(v, 2)))))
         for _ in range(num_steps):
             parent_flat = parent_flat[parent_flat]
-        parent = parent_flat.int()
+        parent_i32 = parent_flat.to(torch.int32)
 
-        edge_vals = torch.maximum(births[u], births[v_])
-        root_u = parent[u]
-        root_v = parent[v_]
+        if arr.ndim == 2:
+            n, m = arr.shape
+            p2d = parent_i32.reshape(n, m)
+            cond_up = F.pad(arr[:-1, :] <= arr[1:, :], (0, 0, 1, 0))
+            cond_left = F.pad(arr[:, :-1] <= arr[:, 1:], (1, 0, 0, 0))
+            cond_right = F.pad(arr[:, 1:] < arr[:, :-1], (0, 1, 0, 0))
+            cond_down = F.pad(arr[1:, :] < arr[:-1, :], (0, 0, 0, 1))
 
-        valid_saddles = (root_u != root_v)
-        root_u = root_u[valid_saddles]
-        root_v = root_v[valid_saddles]
-        saddle_vals = edge_vals[valid_saddles]
+            s_up = cond_up & F.pad(p2d[:-1, :] != p2d[1:, :], (0, 0, 1, 0))
+            s_left = cond_left & F.pad(p2d[:, :-1] != p2d[:, 1:], (1, 0, 0, 0))
+            s_right = cond_right & F.pad(p2d[:, 1:] != p2d[:, :-1], (0, 1, 0, 0))
+            s_down = cond_down & F.pad(p2d[1:, :] != p2d[:-1, :], (0, 0, 0, 1))
 
-        b_u_s = births[root_u.long()]
-        b_v_s = births[root_v.long()]
+            saddle_mask = (
+                s_up.to(torch.uint8)
+                | (s_left.to(torch.uint8) << 1)
+                | (s_right.to(torch.uint8) << 2)
+                | (s_down.to(torch.uint8) << 3)
+            ).reshape(-1)
+            plane = 0
+            cols = int(m)
+        else:
+            d, n, m = arr.shape
+            p3d = parent_i32.reshape(d, n, m)
+            cond_z_up = F.pad(arr[:-1, :, :] <= arr[1:, :, :], (0, 0, 0, 0, 1, 0))
+            cond_y_up = F.pad(arr[:, :-1, :] <= arr[:, 1:, :], (0, 0, 1, 0, 0, 0))
+            cond_x_left = F.pad(arr[:, :, :-1] <= arr[:, :, 1:], (1, 0, 0, 0, 0, 0))
+            cond_x_right = F.pad(arr[:, :, 1:] < arr[:, :, :-1], (0, 1, 0, 0, 0, 0))
+            cond_y_down = F.pad(arr[:, 1:, :] < arr[:, :-1, :], (0, 0, 0, 1, 0, 0))
+            cond_z_down = F.pad(arr[1:, :, :] < arr[:-1, :, :], (0, 0, 0, 0, 0, 1))
 
-        younger_s = torch.where(b_u_s > b_v_s, root_u, torch.where(b_u_s < b_v_s, root_v, torch.maximum(root_u, root_v)))
-        older_s = torch.where(b_u_s > b_v_s, root_v, torch.where(b_u_s < b_v_s, root_u, torch.minimum(root_u, root_v)))
+            s_z_up = cond_z_up & F.pad(p3d[:-1, :, :] != p3d[1:, :, :], (0, 0, 0, 0, 1, 0))
+            s_y_up = cond_y_up & F.pad(p3d[:, :-1, :] != p3d[:, 1:, :], (0, 0, 1, 0, 0, 0))
+            s_x_left = cond_x_left & F.pad(p3d[:, :, :-1] != p3d[:, :, 1:], (1, 0, 0, 0, 0, 0))
+            s_x_right = cond_x_right & F.pad(p3d[:, :, 1:] != p3d[:, :, :-1], (0, 1, 0, 0, 0, 0))
+            s_y_down = cond_y_down & F.pad(p3d[:, 1:, :] != p3d[:, :-1, :], (0, 0, 0, 1, 0, 0))
+            s_z_down = cond_z_down & F.pad(p3d[1:, :, :] != p3d[:-1, :, :], (0, 0, 0, 0, 0, 1))
 
-        saddle_vals_np = saddle_vals.cpu().numpy()
-        younger_s_np = younger_s.cpu().numpy()
-        older_s_np = older_s.cpu().numpy()
+            saddle_mask = (
+                s_z_up.to(torch.uint8)
+                | (s_y_up.to(torch.uint8) << 1)
+                | (s_x_left.to(torch.uint8) << 2)
+                | (s_x_right.to(torch.uint8) << 3)
+                | (s_y_down.to(torch.uint8) << 4)
+                | (s_z_down.to(torch.uint8) << 5)
+            ).reshape(-1)
+            plane = int(n * m)
+            cols = int(m)
 
-        order = np.argsort(saddle_vals_np, kind="stable")
+        births_np = births.detach().cpu().numpy()
+        parent_np = parent_i32.detach().cpu().numpy()
+        mask_np = saddle_mask.detach().cpu().numpy()
 
-        younger_s_list = younger_s_np[order].tolist()
-        older_s_list = older_s_np[order].tolist()
-        saddle_vals_list = saddle_vals_np[order].tolist()
-        births_list = births.cpu().tolist()
-
-        uf_parent = list(range(v))
-        deaths_list = [float('inf')] * v
-
-        for i in range(len(younger_s_list)):
-            ru = younger_s_list[i]
-            while uf_parent[ru] != ru:
-                uf_parent[ru] = uf_parent[uf_parent[ru]]
-                ru = uf_parent[ru]
-
-            rv = older_s_list[i]
-            while uf_parent[rv] != rv:
-                uf_parent[rv] = uf_parent[uf_parent[rv]]
-                rv = uf_parent[rv]
-
-            if ru != rv:
-                bu = births_list[ru]
-                bv = births_list[rv]
-
-                if bu < bv:
-                    old_r = ru
-                    yng_r = rv
-                elif bu > bv:
-                    old_r = rv
-                    yng_r = ru
-                else:
-                    old_r = min(ru, rv)
-                    yng_r = max(ru, rv)
-
-                uf_parent[yng_r] = old_r
-                deaths_list[yng_r] = saddle_vals_list[i]
-
-        deaths_tensor = torch.tensor(deaths_list, dtype=arr.dtype, device=arr.device)
-        deaths_tensor[has_zp] = births[has_zp]
-
-        pairs = torch.stack([births, deaths_tensor, torch.zeros(v, device=arr.device, dtype=arr.dtype)], dim=1)
-        return pairs.cpu().numpy()
+        return _resolve_saddles(births_np, parent_np, mask_np, plane, cols)
 
     def name(self) -> str:
         return "Triton (Parallel Forest)"

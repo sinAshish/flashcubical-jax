@@ -3,70 +3,107 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import numpy as np
 from typing import Any
+from .._core import resolve_saddles as _resolve_saddles
 from .backend_protocol import PHBackend
 
 
 def phase_1_4(image):
-    v = image.size
-    births = image.flatten()
-
     if image.ndim == 2:
         n, m = image.shape
-        r, c = jnp.meshgrid(jnp.arange(n), jnp.arange(m), indexing='ij')
-        u = jnp.concatenate([(r[:, :-1] * m + c[:, :-1]).flatten(), (r[:-1, :] * m + c[:-1, :]).flatten()])
-        v_ = jnp.concatenate([(r[:, :-1] * m + c[:, 1:]).flatten(), (r[1:, :] * m + c[1:, :]).flatten()])
+        v = n * m
+        idx = jnp.arange(v, dtype=jnp.int32).reshape(n, m)
+
+        cond_up = jnp.pad(image[:-1, :] <= image[1:, :], ((1, 0), (0, 0)))
+        cond_left = jnp.pad(image[:, :-1] <= image[:, 1:], ((0, 0), (1, 0)))
+        cond_right = jnp.pad(image[:, 1:] < image[:, :-1], ((0, 0), (0, 1)))
+        cond_down = jnp.pad(image[1:, :] < image[:-1, :], ((0, 1), (0, 0)))
+
+        # Phase 1: Parallel Zero-Persistence Pruning (lowest-index older neighbor wins)
+        parent = idx
+        parent = jnp.where(cond_down, idx + m, parent)
+        parent = jnp.where(cond_right, idx + 1, parent)
+        parent = jnp.where(cond_left, idx - 1, parent)
+        parent = jnp.where(cond_up, idx - m, parent)
+        parent_flat = parent.reshape(-1)
+
+        # Phase 2: Parallel Pointer Jumping
+        def cond(state):
+            curr, prev = state
+            return jnp.any(curr != prev)
+
+        def body(state):
+            curr, _ = state
+            return curr[curr], curr
+
+        parent_flat, _ = jax.lax.while_loop(
+            cond, body, (parent_flat, jnp.full(v, -1, dtype=jnp.int32))
+        )
+        p2d = parent_flat.reshape(n, m)
+
+        # Phase 3: Parallel Saddle Neighbor Bitmask
+        s_up = cond_up & jnp.pad(p2d[:-1, :] != p2d[1:, :], ((1, 0), (0, 0)))
+        s_left = cond_left & jnp.pad(p2d[:, :-1] != p2d[:, 1:], ((0, 0), (1, 0)))
+        s_right = cond_right & jnp.pad(p2d[:, 1:] != p2d[:, :-1], ((0, 0), (0, 1)))
+        s_down = cond_down & jnp.pad(p2d[1:, :] != p2d[:-1, :], ((0, 1), (0, 0)))
+
+        saddle_mask = (
+            s_up.astype(jnp.uint8)
+            | (s_left.astype(jnp.uint8) << 1)
+            | (s_right.astype(jnp.uint8) << 2)
+            | (s_down.astype(jnp.uint8) << 3)
+        ).reshape(-1)
+        return parent_flat, saddle_mask
     else:
         d, n, m = image.shape
-        z, r, c = jnp.meshgrid(jnp.arange(d), jnp.arange(n), jnp.arange(m), indexing='ij')
-        u_z = (z[:-1, :, :] * n * m + r[:-1, :, :] * m + c[:-1, :, :]).flatten()
-        v_z = ((z[:-1, :, :] + 1) * n * m + r[:-1, :, :] * m + c[:-1, :, :]).flatten()
-        u_y = (z[:, :-1, :] * n * m + r[:, :-1, :] * m + c[:, :-1, :]).flatten()
-        v_y = (z[:, :-1, :] * n * m + (r[:, :-1, :] + 1) * m + c[:, :-1, :]).flatten()
-        u_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + c[:, :, :-1]).flatten()
-        v_x = (z[:, :, :-1] * n * m + r[:, :, :-1] * m + (c[:, :, :-1] + 1)).flatten()
-        u = jnp.concatenate([u_z, u_y, u_x])
-        v_ = jnp.concatenate([v_z, v_y, v_x])
+        plane = n * m
+        v = d * plane
+        idx = jnp.arange(v, dtype=jnp.int32).reshape(d, n, m)
 
-    b_u = births[u]
-    b_v = births[v_]
-    edge_vals = jnp.maximum(b_u, b_v)
+        cond_z_up = jnp.pad(image[:-1, :, :] <= image[1:, :, :], ((1, 0), (0, 0), (0, 0)))
+        cond_y_up = jnp.pad(image[:, :-1, :] <= image[:, 1:, :], ((0, 0), (1, 0), (0, 0)))
+        cond_x_left = jnp.pad(image[:, :, :-1] <= image[:, :, 1:], ((0, 0), (0, 0), (1, 0)))
+        cond_x_right = jnp.pad(image[:, :, 1:] < image[:, :, :-1], ((0, 0), (0, 0), (0, 1)))
+        cond_y_down = jnp.pad(image[:, 1:, :] < image[:, :-1, :], ((0, 0), (0, 1), (0, 0)))
+        cond_z_down = jnp.pad(image[1:, :, :] < image[:-1, :, :], ((0, 1), (0, 0), (0, 0)))
 
-    younger = jnp.where(b_u > b_v, u, jnp.where(b_u < b_v, v_, jnp.maximum(u, v_)))
-    older = jnp.where(b_u > b_v, v_, jnp.where(b_u < b_v, u, jnp.minimum(u, v_)))
+        parent = idx
+        parent = jnp.where(cond_z_down, idx + plane, parent)
+        parent = jnp.where(cond_y_down, idx + m, parent)
+        parent = jnp.where(cond_x_right, idx + 1, parent)
+        parent = jnp.where(cond_x_left, idx - 1, parent)
+        parent = jnp.where(cond_y_up, idx - m, parent)
+        parent = jnp.where(cond_z_up, idx - plane, parent)
+        parent_flat = parent.reshape(-1)
 
-    # Phase 1: Parallel Zero-Persistence Pruning
-    best_older = jax.ops.segment_min(older, younger, num_segments=v)
-    MAX_INT = jnp.iinfo(best_older.dtype).max
-    has_zp = (best_older != MAX_INT)
+        def cond(state):
+            curr, prev = state
+            return jnp.any(curr != prev)
 
-    is_zp = (older == best_older[younger])
+        def body(state):
+            curr, _ = state
+            return curr[curr], curr
 
-    # Phase 2: Parallel Pointer Jumping
-    parent = jnp.where(has_zp, best_older, jnp.arange(v))
+        parent_flat, _ = jax.lax.while_loop(
+            cond, body, (parent_flat, jnp.full(v, -1, dtype=jnp.int32))
+        )
+        p3d = parent_flat.reshape(d, n, m)
 
-    def cond(state):
-        curr, prev = state
-        return jnp.any(curr != prev)
+        s_z_up = cond_z_up & jnp.pad(p3d[:-1, :, :] != p3d[1:, :, :], ((1, 0), (0, 0), (0, 0)))
+        s_y_up = cond_y_up & jnp.pad(p3d[:, :-1, :] != p3d[:, 1:, :], ((0, 0), (1, 0), (0, 0)))
+        s_x_left = cond_x_left & jnp.pad(p3d[:, :, :-1] != p3d[:, :, 1:], ((0, 0), (0, 0), (1, 0)))
+        s_x_right = cond_x_right & jnp.pad(p3d[:, :, 1:] != p3d[:, :, :-1], ((0, 0), (0, 0), (0, 1)))
+        s_y_down = cond_y_down & jnp.pad(p3d[:, 1:, :] != p3d[:, :-1, :], ((0, 0), (0, 1), (0, 0)))
+        s_z_down = cond_z_down & jnp.pad(p3d[1:, :, :] != p3d[:-1, :, :], ((0, 1), (0, 0), (0, 0)))
 
-    def body(state):
-        curr, _ = state
-        return curr[curr], curr
-
-    parent, _ = jax.lax.while_loop(cond, body, (parent, jnp.full(v, -1)))
-
-    # Phase 3: Extract and map saddle edges
-    root_u = parent[younger]
-    root_v = parent[older]
-
-    is_saddle = (~is_zp) & (root_u != root_v)
-
-    b_u_s = births[root_u]
-    b_v_s = births[root_v]
-
-    younger_s = jnp.where(b_u_s > b_v_s, root_u, jnp.where(b_u_s < b_v_s, root_v, jnp.maximum(root_u, root_v)))
-    older_s = jnp.where(b_u_s > b_v_s, root_v, jnp.where(b_u_s < b_v_s, root_u, jnp.minimum(root_u, root_v)))
-
-    return younger_s, older_s, edge_vals, is_saddle, births, has_zp
+        saddle_mask = (
+            s_z_up.astype(jnp.uint8)
+            | (s_y_up.astype(jnp.uint8) << 1)
+            | (s_x_left.astype(jnp.uint8) << 2)
+            | (s_x_right.astype(jnp.uint8) << 3)
+            | (s_y_down.astype(jnp.uint8) << 4)
+            | (s_z_down.astype(jnp.uint8) << 5)
+        ).reshape(-1)
+        return parent_flat, saddle_mask
 
 
 _jit_phases_1_4 = jax.jit(phase_1_4)
@@ -84,66 +121,23 @@ class JaxBackend(PHBackend):
     def compute_ph(self, arr: Any) -> Any:
         if not isinstance(arr, jax.Array):
             arr = jnp.asarray(arr, dtype=jnp.float64)
-        v = arr.size
 
-        # Run JIT-compiled Phases 1-3 on device
         out = _jit_phases_1_4(arr)
         jax.block_until_ready(out)
-        younger_s_jax, older_s_jax, edge_vals_jax, is_saddle_jax, births_jax, has_zp_jax = out
+        parent_jax, saddle_mask_jax = out
 
-        # Convert to numpy arrays on CPU and filter valid saddles before sorting
-        is_saddle_np = np.asarray(is_saddle_jax)
-        younger_s_np = np.asarray(younger_s_jax)[is_saddle_np]
-        older_s_np = np.asarray(older_s_jax)[is_saddle_np]
-        saddle_vals_np = np.asarray(edge_vals_jax)[is_saddle_np]
-        births = np.asarray(births_jax)
-        has_zp = np.asarray(has_zp_jax)
+        births_np = np.asarray(arr, dtype=np.float64).reshape(-1)
+        parent_np = np.asarray(parent_jax, dtype=np.int32)
+        mask_np = np.asarray(saddle_mask_jax, dtype=np.uint8)
 
-        # Phase 4: Stable sort valid saddle edges on CPU
-        order = np.argsort(saddle_vals_np, kind="stable")
-        root_u_list = younger_s_np[order].tolist()
-        root_v_list = older_s_np[order].tolist()
-        saddle_vals_list = saddle_vals_np[order].tolist()
-        births_list = births.tolist()
+        if arr.ndim == 2:
+            plane = 0
+            cols = int(arr.shape[1])
+        else:
+            plane = int(arr.shape[1] * arr.shape[2])
+            cols = int(arr.shape[2])
 
-        # Phase 5: Sequential Union-Find strictly on the minimal saddle topology on CPU
-        uf_parent = list(range(v))
-        deaths = [float('inf')] * v
-
-        for i in range(len(root_u_list)):
-            val = saddle_vals_list[i]
-            ru = root_u_list[i]
-            while uf_parent[ru] != ru:
-                uf_parent[ru] = uf_parent[uf_parent[ru]]
-                ru = uf_parent[ru]
-
-            rv = root_v_list[i]
-            while uf_parent[rv] != rv:
-                uf_parent[rv] = uf_parent[uf_parent[rv]]
-                rv = uf_parent[rv]
-
-            if ru != rv:
-                bu = births_list[ru]
-                bv = births_list[rv]
-
-                if bu < bv:
-                    old_r = ru
-                    yng_r = rv
-                elif bu > bv:
-                    old_r = rv
-                    yng_r = ru
-                else:
-                    old_r = min(ru, rv)
-                    yng_r = max(ru, rv)
-
-                uf_parent[yng_r] = old_r
-                deaths[yng_r] = val
-
-        deaths_arr = np.array(deaths, dtype=np.float64)
-        deaths_arr[has_zp] = births[has_zp]
-
-        pairs = np.stack([births, deaths_arr, np.zeros(v)], axis=1)
-        return pairs
+        return _resolve_saddles(births_np, parent_np, mask_np, plane, cols)
 
     def name(self) -> str:
         return "JAX (Parallel Forest)"

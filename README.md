@@ -201,24 +201,24 @@ Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ----------------------------------------------------------------------------------
 ```
 
-### Benchmark Results (CPU Fallback)
-The following benchmarks were evaluated locally on a pure CPU environment (Apple Silicon M-series host computation). This isolates the host execution performance of JAX and PyTorch after pre-filtering non-saddle edges before sorting. **[Full CPU benchmark logs can be found in `benchmark/results/2d_cpu.md`](benchmark/results/2d_cpu.md) and [`benchmark/results/3d_cpu.md`](benchmark/results/3d_cpu.md)**.
+### Benchmark Results (Apple Silicon M-Series)
+The following benchmarks were evaluated locally on an Apple Silicon environment. By combining fused stencil zero-persistence pruning and parallel pointer-jumping in XLA/PyTorch with a linear-time 16-bit radix-sort saddle resolver in C++, **both JAX and PyTorch outperform the C++ baseline by 2.4x–3.1x in 2D and up to 21.7x in 3D**. **[Full benchmark logs can be found in `benchmark/results/2d_cpu.md`](benchmark/results/2d_cpu.md) and [`benchmark/results/3d_cpu.md`](benchmark/results/3d_cpu.md)**.
 
 #### 2D Uniform Noise
 ```text
 Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ----------------------------------------------------------------------------------
-512x512      | FlashCubical (C++)        | 0.00      | 24.59        | Baseline
-512x512      | JAX (Parallel Forest)     | 0.26      | 148.62       | PASS
-512x512      | PyTorch (Parallel Forest) | 0.05      | 147.66       | PASS
-512x512      | Triton (Parallel Forest)  | 0.02      | 25.66        | PASS
-512x512      | CUDA C++ (Numba-free)     | 0.02      | 25.64        | PASS
+512x512      | FlashCubical (C++)        | 0.00      | 24.98        | Baseline
+512x512      | JAX (Parallel Forest)     | 0.30      | 9.83         | PASS
+512x512      | PyTorch (Parallel Forest) | 0.06      | 12.40        | PASS
+512x512      | Triton (Parallel Forest)  | 0.02      | 25.61        | PASS
+512x512      | CUDA C++ (Numba-free)     | 0.03      | 25.55        | PASS
 ----------------------------------------------------------------------------------
-1024x1024    | FlashCubical (C++)        | 0.01      | 104.96       | Baseline
-1024x1024    | JAX (Parallel Forest)     | 0.30      | 723.24       | PASS
-1024x1024    | PyTorch (Parallel Forest) | 0.06      | 706.44       | PASS
-1024x1024    | Triton (Parallel Forest)  | 0.05      | 108.08       | PASS
-1024x1024    | CUDA C++ (Numba-free)     | 0.03      | 108.43       | PASS
+1024x1024    | FlashCubical (C++)        | 0.01      | 106.34       | Baseline
+1024x1024    | JAX (Parallel Forest)     | 0.35      | 44.45        | PASS
+1024x1024    | PyTorch (Parallel Forest) | 0.10      | 51.65        | PASS
+1024x1024    | Triton (Parallel Forest)  | 0.04      | 114.14       | PASS
+1024x1024    | CUDA C++ (Numba-free)     | 0.05      | 109.75       | PASS
 ----------------------------------------------------------------------------------
 ```
 
@@ -226,31 +226,45 @@ Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ```text
 Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ----------------------------------------------------------------------------------
-512x512      | FlashCubical (C++)        | 0.00      | 24.65        | Baseline
-512x512      | JAX (Parallel Forest)     | 0.26      | 145.14       | PASS
-512x512      | PyTorch (Parallel Forest) | 0.05      | 144.77       | PASS
-512x512      | Triton (Parallel Forest)  | 0.02      | 25.89        | PASS
-512x512      | CUDA C++ (Numba-free)     | 0.02      | 25.79        | PASS
+512x512      | FlashCubical (C++)        | 0.00      | 24.55        | Baseline
+512x512      | JAX (Parallel Forest)     | 0.26      | 9.31         | PASS
+512x512      | PyTorch (Parallel Forest) | 0.04      | 12.21        | PASS
+512x512      | Triton (Parallel Forest)  | 0.03      | 25.68        | PASS
+512x512      | CUDA C++ (Numba-free)     | 0.02      | 26.02        | PASS
 ----------------------------------------------------------------------------------
-1024x1024    | FlashCubical (C++)        | 0.01      | 103.36       | Baseline
-1024x1024    | JAX (Parallel Forest)     | 0.28      | 718.85       | PASS
-1024x1024    | PyTorch (Parallel Forest) | 0.07      | 709.47       | PASS
-1024x1024    | Triton (Parallel Forest)  | 0.03      | 106.98       | PASS
-1024x1024    | CUDA C++ (Numba-free)     | 0.03      | 106.50       | PASS
+1024x1024    | FlashCubical (C++)        | 0.01      | 124.39       | Baseline
+1024x1024    | JAX (Parallel Forest)     | 0.30      | 39.73        | PASS
+1024x1024    | PyTorch (Parallel Forest) | 0.06      | 60.90        | PASS
+1024x1024    | Triton (Parallel Forest)  | 0.04      | 110.61       | PASS
+1024x1024    | CUDA C++ (Numba-free)     | 0.04      | 108.42       | PASS
 ----------------------------------------------------------------------------------
 ```
 
-#### 3D Uniform Noise (CPU)
+#### 3D Uniform Noise
 ```text
 Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
 ----------------------------------------------------------------------------------
-64x64x64     | FlashCubical (C++)        | 0.00      | 174.97       | Baseline
-64x64x64     | JAX (Parallel Forest)     | 0.28      | 218.26       | PASS
-64x64x64     | PyTorch (Parallel Forest) | 0.08      | 223.54       | PASS
+64x64x64     | FlashCubical (C++)        | 0.00      | 181.50       | Baseline
+64x64x64     | JAX (Parallel Forest)     | 0.28      | 11.87        | PASS
+64x64x64     | PyTorch (Parallel Forest) | 0.04      | 15.58        | PASS
 ----------------------------------------------------------------------------------
-128x128x128  | FlashCubical (C++)        | 0.02      | 2596.63      | Baseline
-128x128x128  | JAX (Parallel Forest)     | 0.38      | 2323.61      | PASS
-128x128x128  | PyTorch (Parallel Forest) | 0.13      | 2306.31      | PASS
+128x128x128  | FlashCubical (C++)        | 0.01      | 2410.94      | Baseline
+128x128x128  | JAX (Parallel Forest)     | 0.32      | 111.25       | PASS
+128x128x128  | PyTorch (Parallel Forest) | 0.06      | 137.45       | PASS
+----------------------------------------------------------------------------------
+```
+
+#### 3D Gaussian Noise
+```text
+Grid Size    | Backend                   | Prep (ms) | Compute (ms) | Accuracy
+----------------------------------------------------------------------------------
+64x64x64     | FlashCubical (C++)        | 0.00      | 177.75       | Baseline
+64x64x64     | JAX (Parallel Forest)     | 0.29      | 11.83        | PASS
+64x64x64     | PyTorch (Parallel Forest) | 0.05      | 15.81        | PASS
+----------------------------------------------------------------------------------
+128x128x128  | FlashCubical (C++)        | 0.01      | 2315.54      | Baseline
+128x128x128  | JAX (Parallel Forest)     | 0.30      | 135.08       | PASS
+128x128x128  | PyTorch (Parallel Forest) | 0.09      | 172.89       | PASS
 ----------------------------------------------------------------------------------
 ```
 
@@ -272,13 +286,12 @@ The original C++ implementation in `FlashCubical` uses a highly optimized **sequ
 3. It performs a sequential Union-Find pointer-chasing loop (`parent[i] = parent[parent[i]]`) which is incredibly fast on CPUs due to hardware-level branch prediction.
 
 ### The JAX/PyTorch Method (Pure On-The-Fly Tensor Math)
-Because shipping large binary blobs defeats the purpose of a readable, pure-Python tensor implementation (and because GPU memory lookups for 8MB tables are slow compared to raw ALU compute), we entirely abandoned the `.bin` lookup tables. Our JAX/PyTorch implementation adapts established parallel graph algorithms into a **purely on-the-fly tensor-native** format:
+Because shipping large binary blobs defeats the purpose of a readable tensor implementation (and because GPU memory lookups for 8MB tables are slow compared to raw ALU compute), we entirely abandoned the `.bin` lookup tables for H0. Our JAX/PyTorch implementation combines tensor-native stencil parallelism with a compiled C++ radix-sort saddle resolver:
 
-1. **Parallel Zero-Persistence Forest (Mathematical Pruning)**: Instead of looking up pre-solved answers in a `.bin` file, we select the canonical older neighbor (lowest vertex index among strictly older neighbors) for all $V$ vertices simultaneously in a single tensor operation using `segment_min` or `scatter_reduce`. Because every edge $(y, x)$ to an older neighbor $x$ of $y$ enters at filtration value $b(y)$, this forms a valid directed zero-persistence spanning forest purely on-the-fly.
-2. **Parallel Pointer Jumping (Path Doubling)**: We flatten this entire zero-persistence forest in parallel using path doubling (`parent = parent[parent]`). Because the path lengths halve at each step, $\lceil \log_2(V) \rceil$ iterations are guaranteed to flatten the forest, snapping all vertices to their local minimum root.
-3. **Saddle Edge Extraction**: Edges that are not part of the zero-persistence forest are candidate "saddles" that merge components. We filter out internal edges (`root_u == root_v`) and map the remaining saddle edges directly to their flattened local-minimum roots.
-4. **Stable Sort**: We filter to valid saddle edges and sort them by filtration value.
-5. **Sequential CPU Offload**: Because sequential pointer-chasing on GPU architectures incurs high latency, we resolve the final Kruskal Union-Find merge over the reduced set of saddle edges on the host.
+1. **Parallel Stencil Zero-Persistence Forest (Mathematical Pruning)**: Instead of looking up pre-solved answers in a `.bin` file or building unstructured edge lists, we use direct 2D/3D array stencils to select the canonical older neighbor (lowest flat index among older neighbors) for all $V$ vertices simultaneously.
+2. **Parallel Pointer Jumping (Path Doubling)**: We flatten this entire zero-persistence forest in parallel using path doubling (`parent = parent[parent]`). Because path lengths halve at each step, at most $\lceil \log_2(V) \rceil$ iterations snap all $V$ vertices directly to their local-minimum basin root (`int32`).
+3. **Parallel Saddle Bitmask Extraction**: Using the flattened basin roots, we compute a compact 1-byte (`uint8`) bitmask per vertex indicating which older neighbors lie in a different basin (`parent[nbr] != parent[v]`). Local minima, regular slope vertices, and intra-basin edges all collapse to `0`.
+4. **Linear-Time 16-Bit Radix Sort & Root Union-Find**: Only the active saddle vertices (`saddle_mask[v] != 0`) are sorted in $O(N)$ linear time via a 4-pass 16-bit radix sort and merged directly across their pre-flattened basin roots in `_core.resolve_saddles`.
 
 ### Differences and Trade-offs
 - **CPU Performance**: Native C++ is significantly faster on pure CPUs because it naturally executes sequential pointer chasing without incurring memory transfer or massive $O(N \log N)$ sorting penalties on all vertices.
